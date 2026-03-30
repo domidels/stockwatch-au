@@ -1,0 +1,120 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Data files (temporary)
+data/*.csv
+data/*.json
+data/*.parquet
+temp/
+
+# Credentials (NEVER commit these!)
+.env
+.env.local
+.env.production
+.env.staging
+
+# AWS
+.aws/
+
+# Snowflake
+snowflake-key.p8
+snowflake-key.pub
+
+# Cost reports
+cost-reports/
+*.xlsx
+*.xls
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# =====================================================
+# TERRAFORM - CRITICAL SECURITY
+# =====================================================
+# Terraform state files (contain secrets!)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+!terraform.tfvars.example
+
+# Temporary files
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Local .terraform directories
+**/.terraform/*
+
+# .tfvars files are managed as `.local` version control ignored files
+*.auto.tfvars
+*.tfvars.json
+
+# Ignore override files as they are usually used to override resources locally in one-off runs
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Include override files as they are usually used to override resources locally in one-off runs
+!override.tf
+!override.tf.json
+!*_override.tf
+!*_override.tf.json
+
+# Include CLI configuration files
+!terraform.tfvars.example
+!terraform.auto.tfvars
