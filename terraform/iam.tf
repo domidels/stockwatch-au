@@ -155,6 +155,26 @@ resource "aws_iam_access_key" "script_user" {
   user = aws_iam_user.script_user.name
 }
 
+# Lambda permissions for CI/CD (update function code)
+resource "aws_iam_user_policy" "script_lambda_access" {
+  name = "${var.project_name}-script-lambda-policy"
+  user = aws_iam_user.script_user.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:UpdateFunctionCode",
+          "lambda:GetFunction"
+        ]
+        Resource = "arn:aws:lambda:ap-southeast-2:964165005298:function:${var.project_name}-*"
+      }
+    ]
+  })
+}
+
 # ECR permissions for CI/CD (push images)
 resource "aws_iam_user_policy" "script_ecr_access" {
   name = "${var.project_name}-script-ecr-policy"
