@@ -157,6 +157,26 @@ resource "aws_iam_access_key" "script_user" {
   user = aws_iam_user.script_user.name
 }
 
+# CloudFront permissions for CI/CD (invalidate cache)
+resource "aws_iam_user_policy" "script_cloudfront_access" {
+  name = "${var.project_name}-script-cloudfront-policy"
+  user = aws_iam_user.script_user.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cloudfront:ListDistributions",
+          "cloudfront:CreateInvalidation"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # Lambda permissions for CI/CD (update function code)
 resource "aws_iam_user_policy" "script_lambda_access" {
   name = "${var.project_name}-script-lambda-policy"
