@@ -10,6 +10,7 @@ env:
   FUNCTION_INGESTION: stockwatch-au-ingestion
   FUNCTION_API: stockwatch-au-api-handler
   FRONTEND_BUCKET: stockwatch-au-data-964165005298-ap-southeast-2-frontend
+  CLOUDFRONT_DISTRIBUTION_ID: E1QFS79XPGAE9H
 
 jobs:
   # ── Job 1: Deploy Lambda images ──────────────────
@@ -111,9 +112,6 @@ jobs:
 
       - name: Invalidate CloudFront cache
         run: |
-          DISTRIBUTION_ID=$(aws cloudfront list-distributions \
-            --query "DistributionList.Items[?Origins.Items[0].DomainName=='${{ env.FRONTEND_BUCKET }}.s3.amazonaws.com'].Id" \
-            --output text)
           aws cloudfront create-invalidation \
-            --distribution-id $DISTRIBUTION_ID \
+            --distribution-id ${{ env.CLOUDFRONT_DISTRIBUTION_ID }} \
             --paths "/*"
