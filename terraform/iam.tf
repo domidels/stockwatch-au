@@ -143,7 +143,9 @@ resource "aws_iam_user_policy" "script_s3_access" {
         ]
         Resource = [
           "arn:aws:s3:::${var.s3_bucket_name}",
-          "arn:aws:s3:::${var.s3_bucket_name}/*"
+          "arn:aws:s3:::${var.s3_bucket_name}/*",
+          "arn:aws:s3:::${var.s3_bucket_name}-frontend",
+          "arn:aws:s3:::${var.s3_bucket_name}-frontend/*"
         ]
       }
     ]
