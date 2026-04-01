@@ -22,7 +22,7 @@ class SnowflakeLoader:
     def __init__(self,
                  account: str,
                  user: str,
-                 password: str,
+                 private_key_path: str,
                  warehouse: str = 'COMPUTE_WH',
                  database: str = 'ASX_ANALYTICS',
                  schema: str = 'PUBLIC'):
@@ -31,7 +31,7 @@ class SnowflakeLoader:
         """
         self.account = account
         self.user = user
-        self.password = password
+        self.private_key_path = private_key_path
         self.warehouse = warehouse
         self.database = database
         self.schema = schema
@@ -41,10 +41,24 @@ class SnowflakeLoader:
     def connect(self):
         """Establish Snowflake connection"""
         try:
+            from cryptography.hazmat.backends import default_backend
+            from cryptography.hazmat.primitives.serialization import (
+                load_pem_private_key, Encoding, PrivateFormat, NoEncryption
+            )
+
+            with open(self.private_key_path, 'rb') as f:
+                private_key = load_pem_private_key(f.read(), password=None, backend=default_backend())
+
+            private_key_der = private_key.private_bytes(
+                encoding=Encoding.DER,
+                format=PrivateFormat.PKCS8,
+                encryption_algorithm=NoEncryption()
+            )
+
             self.connection = snowflake.connector.connect(
                 account=self.account,
                 user=self.user,
-                password=self.password,
+                private_key=private_key_der,
                 warehouse=self.warehouse,
                 database=self.database,
                 schema=self.schema
@@ -238,9 +252,9 @@ def main():
     """Main loading function"""
     # Configuration - update these values
     SNOWFLAKE_CONFIG = {
-        'account': os.getenv('SNOWFLAKE_ACCOUNT', 'your-account.snowflakecomputing.com'),
-        'user': os.getenv('SNOWFLAKE_USER', 'your-username'),
-        'password': os.getenv('SNOWFLAKE_PASSWORD', 'your-password'),
+        'account': os.getenv('SNOWFLAKE_ACCOUNT'),
+        'user': os.getenv('SNOWFLAKE_USER'),
+        'private_key_path': os.getenv('SNOWFLAKE_PRIVATE_KEY_PATH', 'snowflake-key.p8'),
         'warehouse': os.getenv('SNOWFLAKE_WAREHOUSE', 'COMPUTE_WH'),
         'database': 'ASX_ANALYTICS',
         'schema': 'PUBLIC'
