@@ -1,0 +1,119 @@
+name: Deploy StockWatch AU
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-southeast-2
+  FUNCTION_INGESTION: stockwatch-au-ingestion
+  FUNCTION_API: stockwatch-au-api-handler
+  FRONTEND_BUCKET: stockwatch-au-data-964165005298-ap-southeast-2-frontend
+
+jobs:
+  # ── Job 1: Deploy Lambda images ──────────────────
+  deploy-lambdas:
+    name: Build & Deploy Lambda Images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & push ingestion image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -f lambda/Dockerfile.ingestion \
+            -t $ECR_REGISTRY/${{ env.FUNCTION_INGESTION }}:$IMAGE_TAG \
+            -t $ECR_REGISTRY/${{ env.FUNCTION_INGESTION }}:latest \
+            lambda/
+          docker push $ECR_REGISTRY/${{ env.FUNCTION_INGESTION }}:$IMAGE_TAG
+          docker push $ECR_REGISTRY/${{ env.FUNCTION_INGESTION }}:latest
+
+      - name: Update ingestion Lambda
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ env.FUNCTION_INGESTION }} \
+            --image-uri $ECR_REGISTRY/${{ env.FUNCTION_INGESTION }}:$IMAGE_TAG
+
+      - name: Build & push API image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -f lambda/Dockerfile.api \
+            -t $ECR_REGISTRY/${{ env.FUNCTION_API }}:$IMAGE_TAG \
+            -t $ECR_REGISTRY/${{ env.FUNCTION_API }}:latest \
+            lambda/
+          docker push $ECR_REGISTRY/${{ env.FUNCTION_API }}:$IMAGE_TAG
+          docker push $ECR_REGISTRY/${{ env.FUNCTION_API }}:latest
+
+      - name: Update API Lambda
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ env.FUNCTION_API }} \
+            --image-uri $ECR_REGISTRY/${{ env.FUNCTION_API }}:$IMAGE_TAG
+
+  # ── Job 2: Deploy Frontend ───────────────────────
+  deploy-frontend:
+    name: Build & Deploy Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build React app
+        working-directory: frontend
+        env:
+          REACT_APP_API_URL: ${{ secrets.API_GATEWAY_URL }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy to S3
+        run: |
+          aws s3 sync frontend/build s3://${{ env.FRONTEND_BUCKET }} --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Origins.Items[0].DomainName=='${{ env.FRONTEND_BUCKET }}.s3.amazonaws.com'].Id" \
+            --output text)
+          aws cloudfront create-invalidation \
+            --distribution-id $DISTRIBUTION_ID \
+            --paths "/*"

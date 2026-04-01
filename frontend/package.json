@@ -1,9 +1,3 @@
-# =====================================================
-# React Frontend for StockWatch AU
-# Run: npm install && npm start
-# Build: npm run build
-# =====================================================
-
 {
   "name": "stockwatch-au-dashboard",
   "version": "1.0.0",

@@ -20,79 +20,6 @@ resource "aws_s3_bucket_public_access_block" "data_bucket" {
   restrict_public_buckets = true
 }
 
-# =====================================================
-# VERSIONING (for cost optimization tracking)
-# =====================================================
-
-resource "aws_s3_bucket_versioning" "data_bucket" {
-  bucket = aws_s3_bucket.data_bucket.id
-
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-# =====================================================
-# LIFECYCLE POLICY (COST OPTIMIZATION)
-# =====================================================
-
-resource "aws_s3_bucket_lifecycle_configuration" "data_bucket" {
-  bucket = aws_s3_bucket.data_bucket.id
-
-  rule {
-    id     = "transition-to-ia"
-    status = "Enabled"
-
-    filter {
-      prefix = "asx_data_"
-    }
-
-    transition {
-      days          = 30
-      storage_class = "STANDARD_IA"  # 46% cost savings
-    }
-
-    transition {
-      days          = 90
-      storage_class = "GLACIER"      # 82% cost savings
-    }
-
-    transition {
-      days          = 365
-      storage_class = "DEEP_ARCHIVE" # 95% cost savings
-    }
-
-    expiration {
-      days = 2555  # 7 years (optional)
-    }
-
-    noncurrent_version_transition {
-      noncurrent_days = 30
-      storage_class   = "GLACIER"
-    }
-
-    noncurrent_version_expiration {
-      noncurrent_days = 90
-    }
-  }
-
-  rule {
-    id     = "cleanup-temp-files"
-    status = "Enabled"
-
-    filter {
-      prefix = "temp/"
-    }
-
-    expiration {
-      days = 7
-    }
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 1
-    }
-  }
-}
 
 # =====================================================
 # S3 BUCKET FOR FRONTEND (CloudFront origin)
@@ -210,13 +137,3 @@ resource "aws_cloudfront_distribution" "frontend" {
   tags = var.tags
 }
 
-# =====================================================
-# S3 BUCKET LOGGING (cost optimization tracking)
-# =====================================================
-
-resource "aws_s3_bucket_logging" "data_bucket" {
-  bucket = aws_s3_bucket.data_bucket.id
-
-  target_bucket = aws_s3_bucket.data_bucket.id
-  target_prefix = "logs/"
-}

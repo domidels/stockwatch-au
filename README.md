@@ -1,318 +1,289 @@
-# StockWatch AU - Australian Stock Market Analytics Portfolio
+# StockWatch AU - Australian Stock Market Analytics
 
-**Enterprise-grade data pipeline + Dashboard. Cost: <$5/month.**
+End-to-end data pipeline and analytics dashboard for ASX (Australian Stock Exchange) market data. Built with a serverless AWS architecture, Infrastructure as Code, and a React frontend.
 
-## 🎯 Quick Overview
-
-```
-ASX Data
-   ↓
-Python ETL (yfinance)
-   ↓
-S3 (Data Lake) ← $1-2/month
-   ↓
-Snowflake (Analytics) ← Trial/Cheap
-   ↓
-Lambda API ← Free tier
-   ↓
-React Dashboard + CloudFront ← $0-1/month
-```
-
-**Total Monthly Cost: $2-5** ✅
+Live dashboard: https://d3pydjy6229hps.cloudfront.net
 
 ---
 
-## 📁 Project Structure
+## Architecture
+
+```
+EventBridge (daily, 4:30 PM Sydney, Mon-Fri)
+      |
+Lambda Ingestion
+  |-- yfinance API  -->  DataFrame (in memory)
+  |-- DataFrame     -->  S3 (Parquet, partitioned by date)
+  |-- S3            -->  Snowflake (MERGE via external stage)
+      |
+Lambda API (triggered by API Gateway)
+  |-- Snowflake queries  -->  JSON response
+      |
+React Dashboard (CloudFront + S3)
+  |-- Market Overview page  (aggregated stats, top performers, volatility)
+  |-- Stock Explorer page   (price history per ticker, line chart)
+```
+
+**Monthly cost: < $1**
+
+---
+
+## Project Structure
 
 ```
 stockwatch-au/
-├── terraform/                    # Infrastructure as Code
-│   ├── main.tf                  # Main config
-│   ├── variables.tf             # Variables
-│   ├── outputs.tf               # Outputs
-│   ├── iam.tf                   # Security (roles/policies)
-│   ├── s3.tf                    # S3 + CloudFront
-│   ├── lambda.tf                # Lambda + API Gateway
-│   ├── versions.tf              # Provider versions
-│   └── terraform.tfvars.example # Template (copy & fill)
-│
-├── lambda/                      # Backend
-│   ├── handler.py              # API endpoints (Snowflake queries)
-│   └── handler.zip             # Packaged for AWS
-│
-├── frontend/                    # Dashboard
-│   ├── src/
-│   │   ├── App.jsx             # Main component
-│   │   ├── Dashboard.jsx       # Charts + tables
-│   │   ├── api.js              # Lambda API client
-│   │   ├── index.js            # Entry point
-│   │   └── index.css           # Tailwind styles
-│   ├── public/
-│   │   └── index.html          # HTML template
-│   └── package.json            # Dependencies
-│
-├── scripts/                     # Python ETL
-│   ├── extract_asx_data.py     # Yfinance extraction
-│   ├── upload_to_s3.py         # S3 upload (cost optimized)
-│   └── snowflake_loader.py     # Load to Snowflake
-│
-├── snowflake/                   # Analytics SQL
-│   ├── schemas/asx_schema.sql  # Database schema
-│   └── queries/asx_analytics.sql # Advanced queries
-│
-├── docs/                        # Documentation
-│   ├── setup_guide.md          # Initial setup
-│   └── terraform_deployment.md # Terraform guide
-│
-├── .env.example                 # Env template
-├── requirements.txt             # Python dependencies
-└── .gitignore                   # Security (no credentials!)
+|-- terraform/                    # Infrastructure as Code
+|   |-- versions.tf               # Provider versions
+|   |-- variables.tf              # Input variables
+|   |-- outputs.tf                # Output values
+|   |-- iam.tf                    # IAM roles, users, policies
+|   |-- s3.tf                     # S3 buckets + CloudFront
+|   |-- lambda.tf                 # API Lambda + API Gateway
+|   |-- ingestion.tf              # Ingestion Lambda + EventBridge
+|   |-- ecr.tf                    # ECR repositories
+|   |-- terraform.tfvars.example  # Configuration template
+|
+|-- lambda/
+|   |-- ingestion.py              # Daily ingestion pipeline
+|   |-- handler.py                # API handler (4 endpoints)
+|   |-- Dockerfile.ingestion      # Container image for ingestion
+|   |-- Dockerfile.api            # Container image for API
+|   |-- requirements-ingestion.txt
+|   |-- requirements-api.txt
+|
+|-- frontend/
+|   |-- src/
+|   |   |-- App.jsx
+|   |   |-- Dashboard.jsx         # Two-page dashboard (Overview + Stock Explorer)
+|   |   |-- api.js                # API client
+|   |   |-- index.js
+|   |   |-- index.css
+|   |-- public/
+|   |   |-- index.html
+|   |-- package.json
+|
+|-- scripts/
+|   |-- build_lambda.sh           # Build and deploy Lambda Docker images
+|   |-- deploy_frontend.sh        # Build and deploy React frontend to S3 + CloudFront
+|   |-- extract_asx_data.py       # Local data extraction (dev only)
+|   |-- upload_to_s3.py           # Local S3 upload (dev only)
+|   |-- snowflake_loader.py       # Local Snowflake loader (dev only)
+|
+|-- snowflake/
+|   |-- schemas/asx_schema.sql
+|   |-- queries/asx_analytics.sql
+|
+|-- .github/
+|   |-- workflows/deploy.yml      # CI/CD pipeline
+|
+|-- .env                          # Local environment variables (not committed)
+|-- requirements.txt
 ```
 
 ---
 
-## 🚀 Getting Started
+## Data Flow
 
-### **Phase 1: Local Development (30 mins)**
+### S3 Partitioning (Hive format, Athena-compatible)
 
-```bash
-# 1. Clone & setup
-cd /home/soms/portfolio/stockwatch-au
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-# 2. Extract sample data
-python scripts/extract_asx_data.py
-
-# 3. Test locally
-python demo.py
+```
+s3://stockwatch-au-data-.../
+  raw/
+    asx/
+      year=2026/
+        month=03/
+          day=31/
+            asx_data.parquet
 ```
 
-### **Phase 2: AWS Infrastructure (30 mins)**
+One file per trading day. Initial load creates ~130 files (6 months of history). Each subsequent daily run adds one file (~20 rows, ~2 KB).
+
+### Snowflake Schema
+
+```
+ASX_ANALYTICS
+  FINANCE
+    asx_stock_data
+      date, ticker, company_name
+      open, high, low, close, volume
+      dividends, stock_splits, loaded_at
+```
+
+### API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| GET /data/summary | Market overview (stock count, date range, avg price, avg volume) |
+| GET /data/top_performers | Top 10 stocks by average closing price |
+| GET /data/volatility | Top 10 most volatile stocks (std dev of daily returns) |
+| GET /data/history?ticker=CBA.AX | Full price history for a given ticker |
+
+---
+
+## Deployment
+
+### Prerequisites
+
+- AWS account with CLI configured
+- Snowflake account
+- Terraform >= 1.0
+- Docker
+- Node.js 20
+
+### Initial Setup
+
+**1. Configure Terraform**
 
 ```bash
-# 1. Prepare Terraform
 cd terraform
 cp terraform.tfvars.example terraform.tfvars
-nano terraform.tfvars  # Fill in your values
+# Fill in: snowflake_account, snowflake_user, snowflake_private_key
+```
 
-# 2. Deploy
-terraform init
-terraform plan
+**2. Generate Snowflake RSA key pair**
+
+```bash
+openssl genrsa -out snowflake-key.p8 2048
+openssl rsa -in snowflake-key.p8 -pubout -out snowflake-key.pub
+```
+
+Register the public key in Snowflake:
+```sql
+ALTER USER your_user SET RSA_PUBLIC_KEY='<contents of snowflake-key.pub without BEGIN/END lines>';
+```
+
+**3. Deploy infrastructure**
+
+```bash
+# Create ECR repositories first
+terraform apply -target=aws_ecr_repository.ingestion \
+                -target=aws_ecr_repository.api_handler
+
+# Build and push Docker images
+cd ..
+sg docker -c "./scripts/build_lambda.sh all"
+
+# Deploy remaining infrastructure
+cd terraform
 terraform apply
-
-# 3. Save credentials
-terraform output script_user_access_key
-terraform output script_user_secret_key
 ```
 
-**See:** [Terraform Deployment Guide](docs/terraform_deployment.md)
+**4. Store S3 credentials for Snowflake**
 
-### **Phase 3: Configure & Deploy (20 mins)**
+Terraform automatically stores the dedicated `snowflake-s3-reader` IAM user credentials in Secrets Manager. No manual step required.
+
+**5. Run initial data load**
+
+The ingestion Lambda auto-detects an empty table and loads 6 months of history on first run:
 
 ```bash
-# 1. Upload data to S3
-aws configure  # Use credentials from terraform output
-python scripts/upload_to_s3.py
+aws lambda invoke \
+  --function-name stockwatch-au-ingestion \
+  /tmp/result.json && cat /tmp/result.json
+```
 
-# 2. Load to Snowflake
-python scripts/snowflake_loader.py
+Subsequent daily runs are triggered automatically by EventBridge.
 
-# 3. Deploy frontend
+**6. Deploy frontend**
+
+```bash
 cd frontend
-npm install
-npm run build
-aws s3 sync build s3://stockwatch-au-data-frontend-*/ --delete
-
-# 4. Visit dashboard
-# Open CloudFront URL from terraform output
+cp .env.local.example .env.local
+# Set REACT_APP_API_URL to terraform output api_gateway_endpoint
+./scripts/deploy_frontend.sh
 ```
 
----
+### Updating Lambda functions
 
-## 💡 Architecture Highlights
+After modifying `lambda/handler.py` or `lambda/ingestion.py`:
 
-### **Security** 🔒
-- ✅ IAM Roles (no exposed credentials in Lambda)
-- ✅ Secrets Manager (Snowflake creds encrypted)
-- ✅ S3 bucket policies (private + CloudFront)
-- ✅ .gitignore enforced (no tfvars, .tfstate)
-
-### **Cost Optimization** 💰
-- ✅ S3 Lifecycle: STANDARD → IA → GLACIER → DEEP_ARCHIVE
-- ✅ Lambda: ~$0.20/month (free tier)
-- ✅ API Gateway: 1M free requests/month
-- ✅ CloudFront: ~$0.085/GB (global CDN)
-- ✅ Snowflake: Trial $400 credits (6+ months)
-
-### **Scalability** 📈
-- ✅ Terraform IaC (reproducible)
-- ✅ Lambda auto-scales
-- ✅ CloudFront global edge locations
-- ✅ Snowflake serverless scaling
-
-### **Data Quality** 📊
-- ✅ Parquet compression (fast + cheap)
-- ✅ Snowflake clustering (optimal queries)
-- ✅ ASX data validation
-- ✅ Error handling & logging
-
----
-
-## 🔄 Data Flow
-
-### **Daily Pipeline**
-
-```
-1. Extract (Python + yfinance)
-   └─ Top 20 ASX stocks, 6 months history
-
-2. Transform (Pandas)
-   └─ Compress to Parquet + Snappy
-
-3. Upload (boto3)
-   └─ S3 Standard → Auto-transition to IA/Glacier
-
-4. Load (Snowflake)
-   └─ Staged load from S3 (no transfer costs!)
-
-5. Query (Lambda + API Gateway)
-   └─ Top performers, volatility, trends
-
-6. Visualize (React + Recharts)
-   └─ Dashboard via CloudFront
-```
-
-### **Queries Available**
-
-- **Market Summary**: Total stocks, data range, avg prices
-- **Top Performers**: Highest avg prices, volatility
-- **Volatility Analysis**: Standard deviation, worst/best days
-- **Trend Analysis**: Moving averages (5-day, 20-day)
-- **Portfolio Simulation**: Hypothetical returns
-
----
-
-## 📚 Documentation
-
-1. **[Setup Guide](docs/setup_guide.md)** - Initial configuration
-2. **[Terraform Deployment](docs/terraform_deployment.md)** - AWS infrastructure
-3. **Code Comments** - Inline documentation in all files
-
----
-
-## 🎓 Portfolio Value
-
-This project demonstrates:
-
-✅ **Data Engineering**
-- ETL pipeline design
-- Data warehousing (Snowflake)
-- S3 data lakes
-- Cost optimization
-
-✅ **Cloud Architecture**
-- Infrastructure as Code (Terraform)
-- Serverless computing (Lambda)
-- API Gateway design
-- CDN distribution (CloudFront)
-
-✅ **Security**
-- IAM best practices
-- Secrets management
-- Encryption at rest/transit
-
-✅ **Full-Stack Development**
-- Python backend (data pipeline)
-- React frontend (dashboard)
-- REST API (Lambda)
-- DevOps (Terraform)
-
----
-
-## 💻 Technology Stack
-
-- **Languages**: Python, JavaScript (React), SQL, HCL (Terraform)
-- **Data**: Snowflake, AWS S3, Parquet, yfinance
-- **Compute**: AWS Lambda, API Gateway
-- **Frontend**: React, Recharts, Tailwind CSS
-- **Infrastructure**: Terraform, AWS
-- **Monitoring**: CloudWatch Logs, AWS Cost Explorer
-
----
-
-## 🛠️ Maintenance
-
-### **Weekly**
-- Monitor CloudWatch logs
-- Check AWS cost explorer
-- Validate data freshness
-
-### **Monthly**
-- Review Snowflake queries
-- Optimize Lambda memory
-- Update dependencies
-
-### **Quarterly**
-- Extend data retention (if needed)
-- Review lifecycle policies
-- Scale infrastructure
-
----
-
-## ⚠️ Important Notes
-
-1. **Credentials**: Never commit `.env`, `terraform.tfvars`, `.tfstate`
-2. **AWS**: Monitor costs via Cost Explorer
-3. **Snowflake**: Track credit usage (trial: $400)
-4. **Data**: Parquet + Snappy = optimal compression
-
----
-
-## 🚨 Troubleshooting
-
-**Python import errors?**
 ```bash
-pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
+sg docker -c "./scripts/build_lambda.sh api"       # API only
+sg docker -c "./scripts/build_lambda.sh ingestion" # Ingestion only
+sg docker -c "./scripts/build_lambda.sh all"       # Both
 ```
 
-**Terraform authentication failed?**
+### Updating the frontend
+
+After modifying any file in `frontend/src/`:
+
 ```bash
-aws sts get-caller-identity  # Check AWS access
-aws configure  # Reconfigure credentials
+./scripts/deploy_frontend.sh
 ```
 
-**Lambda API returns 500?**
+### CI/CD (GitHub Actions)
+
+Every push to `main` automatically:
+1. Builds and pushes Docker images to ECR
+2. Updates Lambda functions
+3. Builds and deploys the React frontend to S3
+4. Invalidates CloudFront cache
+
+Required GitHub secrets:
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `API_GATEWAY_URL`
+
+---
+
+## Security
+
+- Lambda authenticates to Snowflake via RSA key pair (no password)
+- Snowflake credentials stored in AWS Secrets Manager
+- Dedicated IAM user for Snowflake S3 access (read-only, scoped to `raw/asx/*`)
+- S3 buckets are private, frontend served via CloudFront with OAI
+- No credentials committed to git (`terraform.tfvars`, `.env`, `*.tfstate` in `.gitignore`)
+
+---
+
+## Troubleshooting
+
+**Lambda ingestion fails (Snowflake auth)**
 ```bash
+aws secretsmanager get-secret-value \
+  --secret-id stockwatch-au-snowflake-credentials \
+  --query SecretString --output text
+```
+Verify that `private_key` contains the full PEM including `-----BEGIN/END RSA PRIVATE KEY-----`.
+
+**Lambda ingestion fails (S3 access)**
+```bash
+aws secretsmanager get-secret-value \
+  --secret-id stockwatch-au-s3-credentials \
+  --query SecretString --output text
+```
+
+**View Lambda logs**
+```bash
+aws logs tail /aws/lambda/stockwatch-au-ingestion --follow
 aws logs tail /aws/lambda/stockwatch-au-api-handler --follow
-# Check Snowflake credentials in Secrets Manager
 ```
 
-**Frontend not loading?**
+**Terraform authentication error**
 ```bash
-# Clear CloudFront cache
-aws cloudfront create-invalidation --distribution-id <ID> --paths "/*"
+aws sts get-caller-identity
+```
+
+**CloudFront not updated after frontend deploy**
+```bash
+aws cloudfront create-invalidation \
+  --distribution-id <ID> --paths "/*"
 ```
 
 ---
 
-## 📞 Support
+## Technology Stack
 
-- **AWS Docs**: https://docs.aws.amazon.com
-- **Snowflake Docs**: https://docs.snowflake.com
-- **Terraform Docs**: https://www.terraform.io/docs
-- **React Docs**: https://react.dev
-
----
-
-## 📄 License
-
-Portfolio project - Free to use and modify
-
----
-
-**🎉 Ready to impress recruiters!**
-
-Start with Phase 1, then move to Phase 2 & 3.
+| Layer | Technology |
+|-------|-----------|
+| Data source | yfinance (Yahoo Finance / ASX) |
+| Storage | AWS S3 (Parquet + Snappy compression) |
+| Data warehouse | Snowflake (ASX_ANALYTICS.FINANCE) |
+| Compute | AWS Lambda (Docker container images) |
+| API | AWS API Gateway |
+| Frontend | React, Recharts, Tailwind CSS |
+| CDN | AWS CloudFront |
+| Infrastructure | Terraform |
+| Container registry | AWS ECR |
+| CI/CD | GitHub Actions |
+| Auth | RSA key pair (Snowflake), IAM roles (AWS) |

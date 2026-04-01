@@ -2,22 +2,13 @@
 # LAMBDA FUNCTION
 # =====================================================
 
-# Archive Python code
-data "archive_file" "lambda_code" {
-  type        = "zip"
-  source_file = "${path.module}/../lambda/handler.py"
-  output_path = "${path.module}/../lambda/handler.zip"
-}
-
 resource "aws_lambda_function" "api_handler" {
-  filename         = data.archive_file.lambda_code.output_path
-  function_name    = "${var.project_name}-api-handler"
-  role            = aws_iam_role.lambda_role.arn
-  handler         = "handler.lambda_handler"
-  runtime         = "python3.11"
-  timeout         = var.lambda_timeout
-  memory_size     = var.lambda_memory
-  source_code_hash = data.archive_file.lambda_code.output_base64sha256
+  function_name = "${var.project_name}-api-handler"
+  role          = aws_iam_role.lambda_role.arn
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.api_handler.repository_url}:latest"
+  timeout       = var.lambda_timeout
+  memory_size   = var.lambda_memory
 
   environment {
     variables = {
@@ -105,6 +96,11 @@ resource "aws_api_gateway_integration_response" "api_options_response" {
   resource_id      = aws_api_gateway_resource.api_method_resource.id
   http_method      = aws_api_gateway_method.api_options.http_method
   status_code      = "200"
+
+  depends_on = [
+    aws_api_gateway_integration.api_options_integration,
+    aws_api_gateway_method_response.api_options_response
+  ]
 
   response_parameters = {
     "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"

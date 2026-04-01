@@ -7,6 +7,7 @@ import json
 import os
 import logging
 import boto3
+from datetime import date, datetime
 
 # Configure logging
 logger = logging.getLogger()
@@ -89,10 +90,10 @@ def get_top_performers() -> dict:
         SELECT
             ticker,
             company_name,
-            ROUND(AVG(close_price), 2) as avg_price,
-            ROUND(MAX(close_price), 2) as max_price,
-            ROUND(MIN(close_price), 2) as min_price,
-            ROUND(STDDEV(close_price), 2) as volatility,
+            ROUND(AVG(close), 2) as avg_price,
+            ROUND(MAX(close), 2) as max_price,
+            ROUND(MIN(close), 2) as min_price,
+            ROUND(STDDEV(close), 2) as volatility,
             COUNT(*) as data_points
         FROM asx_stock_data
         GROUP BY ticker, company_name
@@ -115,8 +116,8 @@ def get_volatility_analysis() -> dict:
         WITH daily_returns AS (
             SELECT
                 ticker,
-                (close_price - LAG(close_price) OVER (PARTITION BY ticker ORDER BY date))
-                / LAG(close_price) OVER (PARTITION BY ticker ORDER BY date) * 100 as daily_return_pct
+                (close - LAG(close) OVER (PARTITION BY ticker ORDER BY date))
+                / LAG(close) OVER (PARTITION BY ticker ORDER BY date) * 100 as daily_return_pct
             FROM asx_stock_data
         )
         SELECT
@@ -141,6 +142,22 @@ def get_volatility_analysis() -> dict:
     }
 
 
+def get_stock_history(ticker: str) -> dict:
+    """Get price history for a specific ticker"""
+    query = f"""
+        SELECT date, open, high, low, close, volume
+        FROM asx_stock_data
+        WHERE ticker = '{ticker}'
+        ORDER BY date
+    """
+    results = query_snowflake(query)
+    return {
+        'type': 'history',
+        'ticker': ticker,
+        'data': results
+    }
+
+
 def get_market_summary() -> dict:
     """Get market summary statistics"""
     query = """
@@ -149,7 +166,7 @@ def get_market_summary() -> dict:
             COUNT(*) as total_records,
             MIN(date) as earliest_date,
             MAX(date) as latest_date,
-            ROUND(AVG(close_price), 2) as avg_price,
+            ROUND(AVG(close), 2) as avg_price,
             ROUND(AVG(volume), 0) as avg_volume
         FROM asx_stock_data
     """
@@ -172,7 +189,8 @@ def lambda_handler(event, context):
     try:
         # Extract method from path
         method = event.get('pathParameters', {}).get('method', 'summary').lower()
-        
+        query_params = event.get('queryStringParameters') or {}
+
         # Route to appropriate handler
         if method == 'top_performers':
             result = get_top_performers()
@@ -180,12 +198,23 @@ def lambda_handler(event, context):
             result = get_volatility_analysis()
         elif method == 'summary':
             result = get_market_summary()
+        elif method == 'history':
+            ticker = query_params.get('ticker', '').upper()
+            if not ticker:
+                result = {'error': 'Missing required parameter: ticker'}
+            else:
+                result = get_stock_history(ticker)
         else:
             result = {
                 'error': f'Unknown method: {method}',
-                'available_methods': ['summary', 'top_performers', 'volatility']
+                'available_methods': ['summary', 'top_performers', 'volatility', 'history']
             }
         
+        def json_serial(obj):
+            if isinstance(obj, (date, datetime)):
+                return obj.isoformat()
+            raise TypeError(f"Type {type(obj)} not serializable")
+
         return {
             'statusCode': 200,
             'headers': {
@@ -193,7 +222,7 @@ def lambda_handler(event, context):
                 'Access-Control-Allow-Headers': 'Content-Type',
                 'Content-Type': 'application/json'
             },
-            'body': json.dumps(result)
+            'body': json.dumps(result, default=json_serial)
         }
         
     except Exception as e:

@@ -1,0 +1,6 @@
+yfinance>=0.2.40
+snowflake-connector-python>=3.5.0
+numpy==1.26.4
+pyarrow==14.0.2
+pandas>=2.1.0
+cryptography

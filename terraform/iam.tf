@@ -155,6 +155,78 @@ resource "aws_iam_access_key" "script_user" {
   user = aws_iam_user.script_user.name
 }
 
+# ECR permissions for CI/CD (push images)
+resource "aws_iam_user_policy" "script_ecr_access" {
+  name = "${var.project_name}-script-ecr-policy"
+  user = aws_iam_user.script_user.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+          "ecr:DescribeRepositories",
+          "ecr:ListImages"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# =====================================================
+# IAM USER FOR SNOWFLAKE → S3 READ-ONLY ACCESS
+# =====================================================
+
+resource "aws_iam_user" "snowflake_s3_reader" {
+  name = "${var.project_name}-snowflake-s3-reader"
+  tags = var.tags
+}
+
+resource "aws_iam_user_policy" "snowflake_s3_read" {
+  name = "${var.project_name}-snowflake-s3-read-policy"
+  user = aws_iam_user.snowflake_s3_reader.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.s3_bucket_name}",
+          "arn:aws:s3:::${var.s3_bucket_name}/raw/asx/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_access_key" "snowflake_s3_reader" {
+  user = aws_iam_user.snowflake_s3_reader.name
+}
+
+# Store Snowflake S3 reader credentials in Secrets Manager
+resource "aws_secretsmanager_secret_version" "s3_credentials" {
+  secret_id = aws_secretsmanager_secret.s3_credentials.id
+  secret_string = jsonencode({
+    access_key = aws_iam_access_key.snowflake_s3_reader.id
+    secret_key = aws_iam_access_key.snowflake_s3_reader.secret
+  })
+}
+
 # =====================================================
 # IAM ROLE FOR API GATEWAY
 # =====================================================
