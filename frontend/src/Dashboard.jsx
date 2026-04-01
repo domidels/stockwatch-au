@@ -218,10 +218,10 @@ const PageOverview = ({ summary, topPerformers, volatility, onRefresh }) => (
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }}>
         <SectionCard title="Top Performers — Avg Price (AUD)" icon={<IconBarChart />}>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={topPerformers} barSize={28}>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={topPerformers} barSize={28} margin={{ bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" vertical={false} />
-              <XAxis dataKey="ticker" tick={{ fontSize: 12, fill: '#8c8c8c' }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="ticker" tick={{ fontSize: 11, fill: '#8c8c8c', angle: -35, textAnchor: 'end' }} axisLine={false} tickLine={false} interval={0} />
               <YAxis tick={{ fontSize: 12, fill: '#8c8c8c' }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f5f5f5' }} />
               <Bar dataKey="avg_price" name="Avg Price" radius={[6, 6, 0, 0]}>
@@ -232,10 +232,10 @@ const PageOverview = ({ summary, topPerformers, volatility, onRefresh }) => (
         </SectionCard>
 
         <SectionCard title="Volatility — Std Dev of Daily Returns" icon={<IconZap />}>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={volatility} barSize={28}>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={volatility} barSize={28} margin={{ bottom: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" vertical={false} />
-              <XAxis dataKey="ticker" tick={{ fontSize: 12, fill: '#8c8c8c' }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="ticker" tick={{ fontSize: 11, fill: '#8c8c8c', angle: -35, textAnchor: 'end' }} axisLine={false} tickLine={false} interval={0} />
               <YAxis tick={{ fontSize: 12, fill: '#8c8c8c' }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f5f5f5' }} />
               <Bar dataKey="volatility_std" name="Volatility %" radius={[6, 6, 0, 0]}>
