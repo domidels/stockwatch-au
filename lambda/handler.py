@@ -84,24 +84,44 @@ def query_snowflake(query: str) -> list:
         raise
 
 
-def get_top_performers() -> dict:
-    """Get top performing stocks"""
-    query = """
-        SELECT
+def get_top_performers(days: int = None) -> dict:
+    """Get top performing stocks by total return over the period"""
+    date_filter = f"AND date >= DATEADD(day, -{days}, CURRENT_DATE())" if days else ""
+    query = f"""
+        WITH bounds AS (
+            SELECT
+                ticker,
+                MIN(date) as start_date,
+                MAX(date) as end_date
+            FROM asx_stock_data
+            WHERE 1=1 {date_filter}
+            GROUP BY ticker
+        ),
+        prices AS (
+            SELECT
+                s.ticker,
+                s.company_name,
+                FIRST_VALUE(s.close) OVER (PARTITION BY s.ticker ORDER BY s.date) as first_close,
+                LAST_VALUE(s.close)  OVER (PARTITION BY s.ticker ORDER BY s.date
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as last_close,
+                ROUND(STDDEV(s.close) OVER (PARTITION BY s.ticker), 2) as volatility,
+                COUNT(*) OVER (PARTITION BY s.ticker) as data_points
+            FROM asx_stock_data s
+            JOIN bounds b ON s.ticker = b.ticker
+                AND s.date BETWEEN b.start_date AND b.end_date
+        )
+        SELECT DISTINCT
             ticker,
             company_name,
-            ROUND(AVG(close), 2) as avg_price,
-            ROUND(MAX(close), 2) as max_price,
-            ROUND(MIN(close), 2) as min_price,
-            ROUND(STDDEV(close), 2) as volatility,
-            COUNT(*) as data_points
-        FROM asx_stock_data
-        GROUP BY ticker, company_name
-        HAVING COUNT(*) >= 30
-        ORDER BY avg_price DESC
-        LIMIT 10
+            ROUND(first_close, 2) as start_price,
+            ROUND(last_close, 2) as end_price,
+            ROUND((last_close - first_close) / first_close * 100, 2) as total_return_pct,
+            volatility,
+            data_points
+        FROM prices
+        WHERE data_points >= 20
+        ORDER BY ticker ASC
     """
-    
     results = query_snowflake(query)
     return {
         'type': 'top_performers',
@@ -110,15 +130,17 @@ def get_top_performers() -> dict:
     }
 
 
-def get_volatility_analysis() -> dict:
+def get_volatility_analysis(days: int = None) -> dict:
     """Get volatility analysis"""
-    query = """
+    date_filter = f"AND date >= DATEADD(day, -{days}, CURRENT_DATE())" if days else ""
+    query = f"""
         WITH daily_returns AS (
             SELECT
                 ticker,
                 (close - LAG(close) OVER (PARTITION BY ticker ORDER BY date))
                 / LAG(close) OVER (PARTITION BY ticker ORDER BY date) * 100 as daily_return_pct
             FROM asx_stock_data
+            WHERE 1=1 {date_filter}
         )
         SELECT
             ticker,
@@ -129,11 +151,9 @@ def get_volatility_analysis() -> dict:
         FROM daily_returns
         WHERE daily_return_pct IS NOT NULL
         GROUP BY ticker
-        HAVING COUNT(*) >= 30
-        ORDER BY volatility_std DESC
-        LIMIT 10
+        HAVING COUNT(*) >= 20
+        ORDER BY ticker ASC
     """
-    
     results = query_snowflake(query)
     return {
         'type': 'volatility_analysis',
@@ -142,12 +162,13 @@ def get_volatility_analysis() -> dict:
     }
 
 
-def get_stock_history(ticker: str) -> dict:
+def get_stock_history(ticker: str, days: int = None) -> dict:
     """Get price history for a specific ticker"""
+    date_filter = f"AND date >= DATEADD(day, -{days}, CURRENT_DATE())" if days else ""
     query = f"""
         SELECT date, open, high, low, close, volume
         FROM asx_stock_data
-        WHERE ticker = '{ticker}'
+        WHERE ticker = '{ticker}' {date_filter}
         ORDER BY date
     """
     results = query_snowflake(query)
@@ -190,12 +211,13 @@ def lambda_handler(event, context):
         # Extract method from path
         method = event.get('pathParameters', {}).get('method', 'summary').lower()
         query_params = event.get('queryStringParameters') or {}
+        days = int(query_params['days']) if query_params.get('days', '').isdigit() else None
 
         # Route to appropriate handler
         if method == 'top_performers':
-            result = get_top_performers()
+            result = get_top_performers(days=days)
         elif method == 'volatility':
-            result = get_volatility_analysis()
+            result = get_volatility_analysis(days=days)
         elif method == 'summary':
             result = get_market_summary()
         elif method == 'history':
@@ -203,7 +225,7 @@ def lambda_handler(event, context):
             if not ticker:
                 result = {'error': 'Missing required parameter: ticker'}
             else:
-                result = get_stock_history(ticker)
+                result = get_stock_history(ticker, days=days)
         else:
             result = {
                 'error': f'Unknown method: {method}',

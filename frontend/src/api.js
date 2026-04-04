@@ -28,9 +28,10 @@ export const fetchMarketSummary = async () => {
   }
 };
 
-export const fetchTopPerformers = async () => {
+export const fetchTopPerformers = async (days = null) => {
   try {
-    const response = await apiClient.get('/data/top_performers');
+    const params = days ? `?days=${days}` : '';
+    const response = await apiClient.get(`/data/top_performers${params}`);
     return lowerKeys(response.data.data || []);
   } catch (error) {
     console.error('Error fetching top performers:', error);
@@ -38,9 +39,10 @@ export const fetchTopPerformers = async () => {
   }
 };
 
-export const fetchVolatilityAnalysis = async () => {
+export const fetchVolatilityAnalysis = async (days = null) => {
   try {
-    const response = await apiClient.get('/data/volatility');
+    const params = days ? `?days=${days}` : '';
+    const response = await apiClient.get(`/data/volatility${params}`);
     return lowerKeys(response.data.data || []);
   } catch (error) {
     console.error('Error fetching volatility analysis:', error);
@@ -48,9 +50,10 @@ export const fetchVolatilityAnalysis = async () => {
   }
 };
 
-export const fetchStockHistory = async (ticker) => {
+export const fetchStockHistory = async (ticker, days = null) => {
   try {
-    const response = await apiClient.get(`/data/history?ticker=${ticker}`);
+    const params = days ? `&days=${days}` : '';
+    const response = await apiClient.get(`/data/history?ticker=${ticker}${params}`);
     return lowerKeys(response.data.data || []);
   } catch (error) {
     console.error('Error fetching stock history:', error);

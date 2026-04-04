@@ -231,7 +231,12 @@ def lambda_handler(event, context):
 
         initial_load = is_table_empty(conn)
 
-        if initial_load:
+        # period can be forced via event payload (e.g. {"period": "3y"} for backfill)
+        forced_period = event.get('period')
+        if forced_period:
+            period = forced_period
+            logger.info(f"Forced period from event: {period}")
+        elif initial_load:
             period = "6mo"
             logger.info("Table is empty — initial load, fetching 6 months of history")
         else:
@@ -241,8 +246,9 @@ def lambda_handler(event, context):
         df = extract_data(period)
         logger.info(f"Extracted {len(df)} rows")
 
-        # 3. Upload to S3 + load into Snowflake — one file per day
-        if initial_load:
+        # Upload to S3 + load into Snowflake — one file per day
+        bulk_load = initial_load or bool(forced_period)
+        if bulk_load:
             # Split by actual data date for proper partitioning
             s3_keys = []
             for date_str, group in df.groupby('date'):
