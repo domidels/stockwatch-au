@@ -269,6 +269,7 @@ resource "aws_secretsmanager_secret_version" "s3_credentials" {
   })
 }
 
+
 # =====================================================
 # IAM ROLE FOR API GATEWAY
 # =====================================================

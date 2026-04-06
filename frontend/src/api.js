@@ -61,4 +61,15 @@ export const fetchStockHistory = async (ticker, days = null) => {
   }
 };
 
+
+export const fetchMonthlyReturns = async () => {
+  try {
+    const response = await apiClient.get('/data/heatmap');
+    return lowerKeys(response.data.data || []);
+  } catch (error) {
+    console.error('Error fetching monthly returns:', error);
+    throw error;
+  }
+};
+
 export default apiClient;

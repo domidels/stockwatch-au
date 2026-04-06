@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import {
   XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, LineChart, Line,
+  BarChart, Bar, Cell,
   ScatterChart, Scatter, ZAxis, ReferenceLine, ReferenceArea, Label
 } from 'recharts';
 import {
   fetchMarketSummary,
   fetchTopPerformers,
   fetchVolatilityAnalysis,
-  fetchStockHistory
+  fetchStockHistory,
+  fetchMonthlyReturns
 } from './api';
 
 // ── Icons ──────────────────────────────────────────────────
@@ -49,6 +51,20 @@ const IconInfo = () => (
     <circle cx="12" cy="12" r="10" />
     <line x1="12" y1="8" x2="12" y2="12" />
     <line x1="12" y1="16" x2="12.01" y2="16" />
+  </svg>
+);
+const IconGrid = () => (
+  <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+    <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+  </svg>
+);
+const IconCorrelation = () => (
+  <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path d="M2 12 Q6 4 10 12 Q14 20 18 12 Q20 8 22 12"/>
+    <circle cx="6" cy="9" r="1.5" fill="currentColor" stroke="none"/>
+    <circle cx="12" cy="15" r="1.5" fill="currentColor" stroke="none"/>
+    <circle cx="18" cy="9" r="1.5" fill="currentColor" stroke="none"/>
   </svg>
 );
 
@@ -149,6 +165,7 @@ const SectionCard = ({ title, icon, children }) => (
   </div>
 );
 
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -191,7 +208,9 @@ const Sidebar = ({ activePage, setActivePage }) => (
       <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '8px 12px', marginBottom: 4 }}>Dashboard</p>
       {[
         { id: 'overview', label: 'Market Overview', icon: <IconBarChart /> },
+        { id: 'heatmap', label: 'Monthly Heatmap', icon: <IconGrid /> },
         { id: 'explorer', label: 'Stock Explorer', icon: <IconSearch /> },
+        { id: 'correlation', label: 'Correlation', icon: <IconCorrelation /> },
         { id: 'info', label: 'Stock Info', icon: <IconInfo /> },
       ].map(({ id, label, icon }) => {
         const active = activePage === id;
@@ -420,6 +439,7 @@ const PageOverview = ({ summary }) => {
     };
   }, [cache]);
 
+
   return (
   <>
     <div style={{
@@ -492,23 +512,27 @@ const PageOverview = ({ summary }) => {
         <>
           <div style={{ marginBottom: 28 }}>
             <SectionCard title="Risk / Return — Volatility vs Total Return" icon={<IconZap />}>
-              {/* Category checkboxes */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16, alignItems: 'center' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#1e2a3a' }}>
-                  <input type="checkbox" checked={allSelected} onChange={toggleAll}
-                    style={{ width: 15, height: 15, cursor: 'pointer', accentColor: BLUE }} />
-                  All
-                </label>
-                <div style={{ width: 1, height: 20, background: '#e8e8e8', margin: '0 4px' }} />
-                {Object.entries(CATEGORIES).map(([cat, { color }]) => (
-                  <label key={cat} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
-                    <input type="checkbox" checked={selectedCats.has(cat)} onChange={() => toggleCat(cat)}
-                      style={{ width: 15, height: 15, cursor: 'pointer', accentColor: color }} />
-                    <span style={{ color: selectedCats.has(cat) ? color : '#bfbfbf', fontWeight: selectedCats.has(cat) ? 600 : 400, transition: 'color 0.15s' }}>
-                      {cat}
-                    </span>
-                  </label>
-                ))}
+              {/* Category pills — colored */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, color: '#8c8c8c', fontWeight: 500 }}>Sector:</span>
+                <button onClick={toggleAll} style={{
+                  padding: '5px 14px', borderRadius: 20, border: '1px solid #d9d9d9',
+                  background: '#fff', color: '#1e2a3a',
+                  fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s'
+                }}>{allSelected ? 'Deselect All' : 'Select All'}</button>
+                {Object.entries(CATEGORIES).map(([cat, { color }]) => {
+                  const active = selectedCats.has(cat);
+                  return (
+                    <button key={cat} onClick={() => toggleCat(cat)} style={{
+                      padding: '5px 14px', borderRadius: 20, border: '1px solid',
+                      borderColor: active ? color : '#d9d9d9',
+                      background: active ? color : '#fff',
+                      color: active ? '#fff' : '#8c8c8c',
+                      fontWeight: active ? 600 : 400,
+                      fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s'
+                    }}>{cat}</button>
+                  );
+                })}
               </div>
               <div style={{ marginBottom: 12, display: 'flex', gap: 20, fontSize: 12, color: '#8c8c8c' }}>
                 <span style={{ color: GREEN }}>↖ Top-left = best (low risk, high return)</span>
@@ -530,7 +554,7 @@ const PageOverview = ({ summary }) => {
             </SectionCard>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 0 }}>
             <SectionCard title="Total Return % — Ranked Best to Worst" icon={<IconBarChart />}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
@@ -644,6 +668,7 @@ const PageExplorer = ({ ticker, setTicker }) => {
     const d = new Date(dateStr);
     return d.toLocaleDateString('en-AU', { month: 'short', year: '2-digit' });
   };
+
 
   return (
     <>
@@ -821,22 +846,570 @@ const PageStockInfo = () => {
               </tr>
             </thead>
             <tbody>
-              {displayed.map((stock, i) => (
-                <tr key={stock.ticker} style={{ borderBottom: '1px solid #fafafa', background: i % 2 === 0 ? '#fff' : '#fafafa', verticalAlign: 'top' }}>
-                  <td style={{ padding: '14px 12px', whiteSpace: 'nowrap' }}>
-                    <span style={{ background: BLUE_LIGHT, color: BLUE, padding: '3px 8px', borderRadius: 6, fontWeight: 700, fontSize: 12 }}>{stock.ticker}</span>
-                  </td>
-                  <td style={{ padding: '14px 12px', fontWeight: 600, color: '#1e2a3a', whiteSpace: 'nowrap' }}>{stock.company}</td>
-                  <td style={{ padding: '14px 12px', whiteSpace: 'nowrap' }}>
-                    <span style={{ background: PURPLE_LIGHT, color: PURPLE, padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 500 }}>{stock.sector}</span>
-                  </td>
-                  <td style={{ padding: '14px 12px', color: '#595959', lineHeight: 1.6 }}>{stock.description}</td>
-                </tr>
-              ))}
+              {displayed.map((stock, i) => {
+                const catEntry = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(stock.ticker));
+                const catColor = catEntry ? catEntry[1].color : BLUE;
+                const catBg = catColor + '22';
+                return (
+                  <tr key={stock.ticker} style={{ borderBottom: '1px solid #fafafa', background: i % 2 === 0 ? '#fff' : '#fafafa', verticalAlign: 'top' }}>
+                    <td style={{ padding: '14px 12px', whiteSpace: 'nowrap' }}>
+                      <span style={{ background: catBg, color: catColor, padding: '3px 8px', borderRadius: 6, fontWeight: 700, fontSize: 12 }}>{stock.ticker}</span>
+                    </td>
+                    <td style={{ padding: '14px 12px', fontWeight: 600, color: '#1e2a3a', whiteSpace: 'nowrap' }}>{stock.company}</td>
+                    <td style={{ padding: '14px 12px', whiteSpace: 'nowrap' }}>
+                      <span
+                        onClick={() => setFilterCat(catEntry ? catEntry[0] : 'All')}
+                        style={{ background: catBg, color: catColor, padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s' }}
+                        onMouseEnter={e => { e.target.style.background = catColor; e.target.style.color = '#fff'; }}
+                        onMouseLeave={e => { e.target.style.background = catBg; e.target.style.color = catColor; }}
+                      >{stock.sector}</span>
+                    </td>
+                    <td style={{ padding: '14px 12px', color: '#595959', lineHeight: 1.6 }}>{stock.description}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </SectionCard>
       </div>
+    </>
+  );
+};
+
+// ── Page: Monthly Heatmap ─────────────────────────────────
+const PageHeatmap = () => {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [tooltip, setTooltip] = useState(null); // { ticker, x, y }
+
+  useEffect(() => {
+    fetchMonthlyReturns()
+      .then(setData)
+      .catch(() => setError('Failed to load heatmap data'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const [selectedCats, setSelectedCats] = useState(new Set(Object.keys(CATEGORIES)));
+
+  const toggleCat = (cat) => setSelectedCats(prev => {
+    const next = new Set(prev);
+    if (next.has(cat)) { next.delete(cat); } else { next.add(cat); }
+    return next;
+  });
+  const allSelected = selectedCats.size === Object.keys(CATEGORIES).length;
+  const toggleAll = () => setSelectedCats(allSelected ? new Set() : new Set(Object.keys(CATEGORIES)));
+
+  // Build months list and ticker list from data
+  const months = [...new Set(data.map(d => d.month))].sort().reverse();
+  const tickers = ASX_TICKERS.filter(t => {
+    const cat = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(t));
+    return cat && selectedCats.has(cat[0]);
+  });
+
+  // Lookup map: ticker+month → return
+  const lookup = {};
+  data.forEach(d => { lookup[`${d.ticker}-${d.month}`] = d.monthly_return; });
+
+  // Color scale: green positive, red negative, intensity by magnitude (capped at ±10%)
+  const cellColor = (val) => {
+    if (val == null) return '#f5f5f5';
+    const capped = Math.max(-10, Math.min(10, val));
+    const intensity = Math.abs(capped) / 10;
+    if (val >= 0) {
+      const g = Math.round(158 + (1 - intensity) * (245 - 158)); // 009E73 → light
+      const r = Math.round((1 - intensity) * 240);
+      const b = Math.round(115 + (1 - intensity) * (245 - 115));
+      return `rgb(${r},${g},${b})`;
+    } else {
+      const r = Math.round(213 + (1 - intensity) * (245 - 213));
+      const g = Math.round((1 - intensity) * 240);
+      const b = Math.round((1 - intensity) * 200);
+      return `rgb(${r},${g},${b})`;
+    }
+  };
+
+  const textColor = (val) => {
+    if (val == null) return '#bfbfbf';
+    return Math.abs(val) > 5 ? '#fff' : '#1e2a3a';
+  };
+
+  // Format month label: show only Jan of each year + every month abbreviated
+  const monthLabel = (m) => {
+    const [year, month] = m.split('-');
+    const d = new Date(parseInt(year), parseInt(month) - 1, 1);
+    const mon = d.toLocaleDateString('en-AU', { month: 'short' });
+    return month === '01' ? `${mon} ${year}` : mon;
+  };
+
+
+  return (
+    <>
+      <div style={{
+        background: '#fff', padding: '16px 32px',
+        borderBottom: '1px solid #f0f0f0',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
+      }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2a3a' }}>Monthly Returns Heatmap</h1>
+        <p style={{ fontSize: 13, color: '#8c8c8c', marginTop: 2 }}>Monthly return % per stock · Green = positive · Red = negative · Intensity = magnitude</p>
+      </div>
+
+      <div style={{ padding: 32, maxWidth: '100%', margin: '0 auto', position: 'relative' }}>
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+            <div style={{ width: 36, height: 36, border: `3px solid ${BLUE_LIGHT}`, borderTopColor: BLUE, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          </div>
+        ) : error ? (
+          <p style={{ color: RED, textAlign: 'center', padding: 40 }}>{error}</p>
+        ) : (
+          <>
+          <SectionCard title="Monthly Return % per Stock" icon={<IconGrid />}>
+            {/* Category filter — colored pills, same as Market Overview */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, color: '#8c8c8c', fontWeight: 500 }}>Sector:</span>
+              <button onClick={toggleAll} style={{
+                padding: '5px 14px', borderRadius: 20, border: '1px solid #d9d9d9',
+                background: '#fff', color: '#1e2a3a',
+                fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s'
+              }}>{allSelected ? 'Deselect All' : 'Select All'}</button>
+              {Object.entries(CATEGORIES).map(([cat, { color }]) => {
+                const active = selectedCats.has(cat);
+                return (
+                  <button key={cat} onClick={() => toggleCat(cat)} style={{
+                    padding: '5px 14px', borderRadius: 20, border: '1px solid',
+                    borderColor: active ? color : '#d9d9d9',
+                    background: active ? color : '#fff',
+                    color: active ? '#fff' : '#8c8c8c',
+                    fontWeight: active ? 600 : 400,
+                    fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s'
+                  }}>{cat}</button>
+                );
+              })}
+            </div>
+
+            {/* Legend */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, fontSize: 12, color: '#8c8c8c', flexWrap: 'wrap' }}>
+              <span>Monthly Return:</span>
+              {[[-10,'≤-10%'],[-5,'-5%'],[-2,'-2%'],[0,'0%'],[2,'+2%'],[5,'+5%'],[10,'≥+10%']].map(([v, label]) => (
+                <span key={v} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ width: 20, height: 14, background: cellColor(v), borderRadius: 3, display: 'inline-block', border: '1px solid #e8e8e8' }} />
+                  {label}
+                </span>
+              ))}
+            </div>
+
+            {/* Custom tooltip */}
+            {tooltip && (() => {
+              const info = STOCK_INFO.find(s => s.ticker === tooltip.ticker);
+              const catEntry = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(tooltip.ticker));
+              const catColor = catEntry ? catEntry[1].color : '#8c8c8c';
+              return (
+                <div style={{
+                  position: 'fixed', left: tooltip.x + 12, top: tooltip.y - 10, zIndex: 1000,
+                  background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8,
+                  padding: '12px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  fontSize: 13, maxWidth: 280, pointerEvents: 'none'
+                }}>
+                  <p style={{ fontWeight: 700, color: '#1e2a3a', marginBottom: 2 }}>{tooltip.ticker}</p>
+                  {info && <p style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 8 }}>{info.company}
+                    <span style={{ marginLeft: 6, background: catColor + '22', color: catColor, padding: '1px 6px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{info.sector}</span>
+                  </p>}
+                  {info && <p style={{ color: '#595959', fontSize: 12, lineHeight: 1.5, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>{info.description}</p>}
+                </div>
+              );
+            })()}
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'separate', borderSpacing: 2, fontSize: 11 }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: 90, textAlign: 'left', padding: '6px 10px', color: '#8c8c8c', fontWeight: 600, position: 'sticky', left: 0, background: '#fff', zIndex: 1 }}>Month</th>
+                    {tickers.map(ticker => {
+                      const catEntry = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(ticker));
+                      const catColor = catEntry ? catEntry[1].color : '#8c8c8c';
+                      return (
+                        <th key={ticker}
+                          onMouseEnter={e => setTooltip({ ticker, x: e.clientX, y: e.clientY })}
+                          onMouseLeave={() => setTooltip(null)}
+                          style={{ minWidth: 52, textAlign: 'center', padding: '6px 4px', color: catColor, fontWeight: 700, whiteSpace: 'nowrap', fontSize: 11, cursor: 'help' }}>
+                          {ticker.replace('.AX', '')}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {months.map(m => (
+                    <tr key={m}>
+                      <td style={{
+                        padding: '4px 10px', fontWeight: m.endsWith('-01') ? 700 : 400,
+                        fontSize: 11, color: m.endsWith('-01') ? '#1e2a3a' : '#8c8c8c',
+                        whiteSpace: 'nowrap', position: 'sticky', left: 0, background: '#fff', zIndex: 1
+                      }}>
+                        {monthLabel(m)}
+                      </td>
+                      {tickers.map(ticker => {
+                        const val = lookup[`${ticker}-${m}`];
+                        return (
+                          <td key={ticker} title={val != null ? `${ticker} ${m}: ${val > 0 ? '+' : ''}${val}%` : 'No data'}
+                            style={{
+                              background: cellColor(val), color: textColor(val),
+                              textAlign: 'center', padding: '5px 3px',
+                              borderRadius: 3, fontSize: 10, fontWeight: 600,
+                              minWidth: 52, cursor: 'default',
+                            }}>
+                            {val != null ? `${val > 0 ? '+' : ''}${val}` : ''}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SectionCard>
+          </>
+        )}
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </>
+  );
+};
+
+// ── CCF computation ───────────────────────────────────────
+const computeCCF = (series1, series2, maxLag = 20) => {
+  // Align by date
+  const map2 = {};
+  series2.forEach(d => { map2[d.date] = d.ret; });
+  const aligned = series1.filter(d => map2[d.date] != null).map(d => ({ ret1: d.ret, ret2: map2[d.date] }));
+  if (aligned.length < 10) return [];
+
+  const n = aligned.length;
+  const mean1 = aligned.reduce((s, d) => s + d.ret1, 0) / n;
+  const mean2 = aligned.reduce((s, d) => s + d.ret2, 0) / n;
+  const std1 = Math.sqrt(aligned.reduce((s, d) => s + (d.ret1 - mean1) ** 2, 0) / n);
+  const std2 = Math.sqrt(aligned.reduce((s, d) => s + (d.ret2 - mean2) ** 2, 0) / n);
+
+  const result = [];
+  for (let lag = -maxLag; lag <= maxLag; lag++) {
+    let sum = 0, count = 0;
+    for (let i = 0; i < n; i++) {
+      const j = i + lag;
+      if (j >= 0 && j < n) {
+        sum += (aligned[i].ret1 - mean1) * (aligned[j].ret2 - mean2);
+        count++;
+      }
+    }
+    result.push({ lag, ccf: parseFloat((sum / (count * std1 * std2)).toFixed(4)) });
+  }
+  return result;
+};
+
+const dailyReturns = (priceData) => {
+  const sorted = [...priceData].sort((a, b) => a.date.localeCompare(b.date));
+  return sorted.slice(1).map((d, i) => ({
+    date: d.date,
+    ret: sorted[i].close > 0 ? (d.close - sorted[i].close) / sorted[i].close * 100 : 0
+  }));
+};
+
+// ── Stock Selector with hover tooltip ─────────────────────
+const StockSelector = ({ label, value, onChange, color }) => {
+  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  const selectedInfo = STOCK_INFO.find(s => s.ticker === value);
+  const selectedCat = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(value));
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</span>
+
+      {/* Trigger button */}
+      <div onClick={() => setOpen(o => !o)} style={{
+        position: 'relative', padding: '9px 14px', borderRadius: 8,
+        border: `2px solid ${color}`, fontSize: 14, fontWeight: 700,
+        color: '#1e2a3a', cursor: 'pointer', background: '#fff',
+        display: 'flex', alignItems: 'center', gap: 10, userSelect: 'none', minWidth: 130
+      }}>
+        {selectedCat && <span style={{ width: 8, height: 8, borderRadius: '50%', background: selectedCat[1].color, flexShrink: 0 }} />}
+        <span>{value.replace('.AX', '')}</span>
+        <span style={{ fontSize: 9, color: '#bfbfbf', marginLeft: 'auto' }}>▼</span>
+
+        {/* Dropdown list */}
+        {open && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={e => { e.stopPropagation(); setOpen(false); setHovered(null); }} />
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 100,
+              background: '#fff', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+              border: '1px solid #e8e8e8', padding: '4px 0', minWidth: 150, maxHeight: 300, overflowY: 'auto'
+            }}>
+              {ASX_TICKERS.map(t => {
+                const cat = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(t));
+                const catColor = cat ? cat[1].color : '#8c8c8c';
+                const isSelected = t === value;
+                return (
+                  <div key={t}
+                    onClick={e => { e.stopPropagation(); onChange(t); setOpen(false); setHovered(null); }}
+                    onMouseEnter={e => { setHovered(t); setTooltipPos({ x: e.clientX, y: e.clientY }); }}
+                    onMouseMove={e => setTooltipPos({ x: e.clientX, y: e.clientY })}
+                    onMouseLeave={() => setHovered(null)}
+                    style={{
+                      padding: '8px 14px', cursor: 'pointer', fontSize: 13,
+                      fontWeight: isSelected ? 700 : 400,
+                      color: isSelected ? catColor : '#1e2a3a',
+                      background: isSelected ? catColor + '12' : '#fff',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      transition: 'background 0.1s'
+                    }}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: catColor, flexShrink: 0 }} />
+                    {t.replace('.AX', '')}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Company name next to trigger */}
+      {selectedInfo && (
+        <span style={{ fontSize: 12, color: '#8c8c8c' }}>{selectedInfo.company}</span>
+      )}
+
+      {/* Hover tooltip */}
+      {hovered && (() => {
+        const info = STOCK_INFO.find(s => s.ticker === hovered);
+        const cat = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(hovered));
+        const catColor = cat ? cat[1].color : '#8c8c8c';
+        return (
+          <div style={{
+            position: 'fixed', left: tooltipPos.x + 16, top: tooltipPos.y - 8, zIndex: 1000,
+            background: '#fff', border: '1px solid #e8e8e8', borderRadius: 10,
+            padding: '12px 16px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            fontSize: 13, maxWidth: 260, pointerEvents: 'none'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ fontWeight: 700, color: '#1e2a3a', fontSize: 14 }}>{hovered.replace('.AX', '')}</span>
+              {cat && <span style={{ background: catColor + '22', color: catColor, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{cat[0]}</span>}
+            </div>
+            {info && <>
+              <p style={{ color: '#595959', fontSize: 12, marginBottom: 6 }}>{info.company}</p>
+              <p style={{ color: '#8c8c8c', fontSize: 11, lineHeight: 1.55, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>{info.description}</p>
+            </>}
+          </div>
+        );
+      })()}
+    </div>
+  );
+};
+
+// ── Page: Correlation ──────────────────────────────────────
+const PageCorrelation = () => {
+  const [ticker1, setTicker1] = useState('CBA.AX');
+  const [ticker2, setTicker2] = useState('BHP.AX');
+  const [corrDays, setCorrDays] = useState(null);
+  const [cache, setCache] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const load = async (t) => {
+      if (cache[t]) return;
+      try {
+        const data = await fetchStockHistory(t, null);
+        setCache(prev => ({ ...prev, [t]: data }));
+      } catch { setError('Failed to load data'); }
+    };
+    setLoading(true);
+    Promise.all([load(ticker1), load(ticker2)]).finally(() => setLoading(false));
+  }, [ticker1, ticker2]);
+
+  const filterByDays = (data) => {
+    if (!corrDays || !data) return data || [];
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - corrDays);
+    return data.filter(d => new Date(d.date) >= cutoff);
+  };
+
+  const data1 = filterByDays(cache[ticker1]);
+  const data2 = filterByDays(cache[ticker2]);
+  const ret1 = React.useMemo(() => data1.length ? dailyReturns(data1) : [], [data1]);
+  const ret2 = React.useMemo(() => data2.length ? dailyReturns(data2) : [], [data2]);
+  const ccfData = React.useMemo(() => ret1.length && ret2.length ? computeCCF(ret1, ret2) : [], [ret1, ret2]);
+  const lag0 = ccfData.find(d => d.lag === 0)?.ccf ?? null;
+
+  // Monthly lag-0 correlation
+  const monthlyCorr = React.useMemo(() => {
+    if (!ret1.length || !ret2.length) return [];
+    const map2 = {};
+    ret2.forEach(d => { map2[d.date] = d.ret; });
+    const byMonth = {};
+    ret1.forEach(d => {
+      if (map2[d.date] == null) return;
+      const m = d.date.slice(0, 7); // YYYY-MM
+      if (!byMonth[m]) byMonth[m] = [];
+      byMonth[m].push({ ret1: d.ret, ret2: map2[d.date] });
+    });
+    return Object.entries(byMonth)
+      .filter(([, pts]) => pts.length >= 5)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, pts]) => {
+        const n = pts.length;
+        const m1 = pts.reduce((s, p) => s + p.ret1, 0) / n;
+        const m2 = pts.reduce((s, p) => s + p.ret2, 0) / n;
+        const std1 = Math.sqrt(pts.reduce((s, p) => s + (p.ret1 - m1) ** 2, 0) / n) || 1;
+        const std2 = Math.sqrt(pts.reduce((s, p) => s + (p.ret2 - m2) ** 2, 0) / n) || 1;
+        const corr = parseFloat((pts.reduce((s, p) => s + (p.ret1 - m1) * (p.ret2 - m2), 0) / (n * std1 * std2)).toFixed(3));
+        return { month, corr, n };
+      });
+  }, [ret1, ret2]);
+  const periodLabel = PERIOD_LABELS[corrDays] ?? 'All-Period';
+  const info1 = STOCK_INFO.find(s => s.ticker === ticker1);
+  const info2 = STOCK_INFO.find(s => s.ticker === ticker2);
+  const cat1 = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(ticker1));
+  const cat2 = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(ticker2));
+  const color1 = cat1 ? cat1[1].color : BLUE;
+  const color2 = cat2 ? cat2[1].color : ORANGE;
+
+  // Significance threshold: ±2/sqrt(n)
+  const n = Math.min(ret1.length, ret2.length);
+  const sigThreshold = n > 0 ? parseFloat((2 / Math.sqrt(n)).toFixed(4)) : 0.1;
+
+
+
+  return (
+    <>
+      <div style={{ background: '#fff', padding: '16px 32px', borderBottom: '1px solid #f0f0f0', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2a3a' }}>Cross-Correlation Analysis</h1>
+        <p style={{ fontSize: 13, color: '#8c8c8c', marginTop: 2 }}>Measures how two stocks move together at different time lags · Lag 0 = same day</p>
+      </div>
+
+      <div style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
+        {/* Controls card */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 24, marginBottom: 28,
+          flexWrap: 'wrap', background: '#fff', borderRadius: 12,
+          padding: '18px 24px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
+          border: `1.5px solid ${BLUE_LIGHT}`
+        }}>
+          <StockSelector label="Stock A" value={ticker1} onChange={setTicker1} color={color1} info={info1} />
+          <div style={{ width: 1, height: 32, background: '#e8e8e8' }} />
+          <StockSelector label="Stock B" value={ticker2} onChange={setTicker2} color={color2} info={info2} />
+          <div style={{ width: 1, height: 32, background: '#e8e8e8' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Period</span>
+            <PeriodFilter selected={corrDays} onChange={setCorrDays} />
+          </div>
+        </div>
+
+        {/* Stat cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, marginBottom: 28 }}>
+          <StatCard
+            label={`Correlation at Lag 0 (${periodLabel})`}
+            value={lag0 !== null ? lag0.toFixed(3) : '—'}
+            icon={<IconCorrelation />}
+            color={lag0 !== null ? (Math.abs(lag0) > sigThreshold ? (lag0 > 0 ? GREEN : RED) : ORANGE) : BLUE}
+            bg={lag0 !== null ? (Math.abs(lag0) > sigThreshold ? (lag0 > 0 ? GREEN_LIGHT : RED_LIGHT) : ORANGE_LIGHT) : BLUE_LIGHT}
+          />
+          <StatCard label="Trading Days" value={n > 0 ? n : '—'} icon={<IconActivity />} color={PURPLE} bg={PURPLE_LIGHT} />
+          <StatCard label="Significance Threshold" value={`±${sigThreshold}`} icon={<IconZap />} color={ORANGE} bg={ORANGE_LIGHT} />
+          <StatCard
+            label="Interpretation"
+            value={lag0 !== null ? (Math.abs(lag0) > sigThreshold ? (lag0 > 0.6 ? 'Strong +' : lag0 > 0.3 ? 'Moderate +' : lag0 < -0.3 ? 'Negative' : 'Weak') : 'Not significant') : '—'}
+            icon={<IconTrending />} color={BLUE} bg={BLUE_LIGHT}
+          />
+        </div>
+
+        {/* CCF Chart */}
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+            <div style={{ width: 36, height: 36, border: `3px solid ${BLUE_LIGHT}`, borderTopColor: BLUE, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          </div>
+        ) : error ? (
+          <p style={{ color: RED, textAlign: 'center', padding: 40 }}>{error}</p>
+        ) : ccfData.length > 0 ? (
+          <SectionCard title={`CCF — ${ticker1.replace('.AX','')} vs ${ticker2.replace('.AX','')} · Lags -20 to +20`} icon={<IconCorrelation />}>
+            <p style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 16 }}>
+              Positive lag: <strong>{ticker1.replace('.AX','')}</strong> leads <strong>{ticker2.replace('.AX','')}</strong> ·
+              Negative lag: <strong>{ticker2.replace('.AX','')}</strong> leads · Dashed lines = significance threshold (±{sigThreshold})
+            </p>
+            <ResponsiveContainer width="100%" height={360}>
+              <BarChart data={ccfData} barSize={14} margin={{ bottom: 20, left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                <XAxis dataKey="lag" tick={{ fontSize: 11, fill: '#8c8c8c' }} axisLine={false} tickLine={false}>
+                  <Label value="Lag (days)" offset={-10} position="insideBottom" style={{ fontSize: 11, fill: '#8c8c8c' }} />
+                </XAxis>
+                <YAxis tick={{ fontSize: 11, fill: '#8c8c8c' }} axisLine={false} tickLine={false} domain={[-1, 1]} tickFormatter={v => v.toFixed(1)} />
+                <Tooltip content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  const d = payload[0].payload;
+                  const sig = Math.abs(d.ccf) > sigThreshold;
+                  return (
+                    <div style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8, padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13 }}>
+                      <p style={{ fontWeight: 700, color: '#1e2a3a', marginBottom: 4 }}>Lag {d.lag > 0 ? `+${d.lag}` : d.lag}</p>
+                      <p style={{ color: d.ccf >= 0 ? GREEN : RED }}>CCF: <strong>{d.ccf}</strong></p>
+                      <p style={{ fontSize: 11, color: sig ? (d.ccf > 0 ? GREEN : RED) : '#8c8c8c', marginTop: 4 }}>{sig ? (d.ccf > 0 ? '✓ Significant positive' : '✓ Significant negative') : 'Not significant'}</p>
+                    </div>
+                  );
+                }} />
+                <ReferenceLine y={sigThreshold} stroke={ORANGE} strokeDasharray="4 4" strokeWidth={1.5} />
+                <ReferenceLine y={-sigThreshold} stroke={ORANGE} strokeDasharray="4 4" strokeWidth={1.5} />
+                <ReferenceLine y={0} stroke="#d9d9d9" strokeWidth={1} />
+                <Bar dataKey="ccf" name="CCF" radius={[3, 3, 0, 0]}>
+                  {ccfData.map((d) => (
+                    <Cell key={d.lag} fill={
+                      d.lag === 0 ? BLUE :
+                      Math.abs(d.ccf) > sigThreshold ? (d.ccf > 0 ? GREEN : RED) : '#d0d0d0'
+                    } />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </SectionCard>
+        ) : null}
+
+        {/* Monthly correlation chart */}
+        {monthlyCorr.length > 1 && (
+          <div style={{ marginTop: 24 }}>
+          <SectionCard title={`Monthly Correlation at Lag 0 — ${ticker1.replace('.AX','')} vs ${ticker2.replace('.AX','')}`} icon={<IconCorrelation />}>
+            <p style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 16 }}>
+              Pearson correlation of daily returns computed separately for each calendar month · Dashed lines = significance threshold
+            </p>
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={monthlyCorr} margin={{ bottom: 30, left: 10, right: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#8c8c8c' }} axisLine={false} tickLine={false} angle={-40} textAnchor="end" interval="preserveStartEnd">
+                  <Label value="Month" offset={-18} position="insideBottom" style={{ fontSize: 11, fill: '#8c8c8c' }} />
+                </XAxis>
+                <YAxis tick={{ fontSize: 11, fill: '#8c8c8c' }} axisLine={false} tickLine={false} domain={[-1, 1]} tickFormatter={v => v.toFixed(1)} />
+                <ReferenceLine y={sigThreshold} stroke={ORANGE} strokeDasharray="4 4" strokeWidth={1.5} />
+                <ReferenceLine y={-sigThreshold} stroke={ORANGE} strokeDasharray="4 4" strokeWidth={1.5} />
+                <ReferenceLine y={0} stroke="#d9d9d9" strokeWidth={1} />
+                <Tooltip content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  const d = payload[0].payload;
+                  const sig = Math.abs(d.corr) > sigThreshold;
+                  return (
+                    <div style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8, padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13 }}>
+                      <p style={{ fontWeight: 700, color: '#1e2a3a', marginBottom: 4 }}>{d.month}</p>
+                      <p style={{ color: d.corr >= 0 ? GREEN : RED }}>Correlation: <strong>{d.corr}</strong></p>
+                      <p style={{ fontSize: 11, color: '#8c8c8c' }}>{d.n} trading days</p>
+                      <p style={{ fontSize: 11, color: sig ? (d.corr > 0 ? GREEN : RED) : '#8c8c8c', marginTop: 4 }}>{sig ? (d.corr > 0 ? '✓ Significant positive' : '✓ Significant negative') : 'Not significant'}</p>
+                    </div>
+                  );
+                }} />
+                <Line type="monotone" dataKey="corr" stroke={BLUE} strokeWidth={2} dot={{ r: 3, fill: BLUE, strokeWidth: 0 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </SectionCard>
+          </div>
+        )}
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </>
   );
 };
@@ -904,8 +1477,10 @@ export const Dashboard = () => {
       <Sidebar activePage={activePage} setActivePage={setActivePage} />
       <div style={{ flex: 1, overflow: 'auto' }}>
         <div style={{ display: activePage === 'overview' ? 'block' : 'none' }}><PageOverview summary={summary} /></div>
+        <div style={{ display: activePage === 'heatmap' ? 'block' : 'none' }}><PageHeatmap /></div>
         <div style={{ display: activePage === 'explorer' ? 'block' : 'none' }}><PageExplorer ticker={ticker} setTicker={setTicker} /></div>
         <div style={{ display: activePage === 'info' ? 'block' : 'none' }}><PageStockInfo /></div>
+        <div style={{ display: activePage === 'correlation' ? 'block' : 'none' }}><PageCorrelation /></div>
         {lastUpdated && (
           <p style={{ textAlign: 'center', color: '#bfbfbf', fontSize: 12, padding: '16px 0 32px' }}>
             Last updated at {lastUpdated} · Powered by Snowflake & AWS

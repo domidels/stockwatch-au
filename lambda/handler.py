@@ -179,6 +179,45 @@ def get_stock_history(ticker: str, days: int = None) -> dict:
     }
 
 
+def get_monthly_returns() -> dict:
+    """Get monthly returns per ticker for heatmap"""
+    query = """
+        WITH monthly_bounds AS (
+            SELECT
+                ticker,
+                DATE_TRUNC('month', date) AS month,
+                MIN(date) AS first_day,
+                MAX(date) AS last_day
+            FROM asx_stock_data
+            GROUP BY ticker, DATE_TRUNC('month', date)
+        ),
+        monthly_prices AS (
+            SELECT
+                b.ticker,
+                b.month,
+                first_close.close AS open_price,
+                last_close.close  AS close_price
+            FROM monthly_bounds b
+            JOIN asx_stock_data first_close
+                ON first_close.ticker = b.ticker AND first_close.date = b.first_day
+            JOIN asx_stock_data last_close
+                ON last_close.ticker = b.ticker AND last_close.date = b.last_day
+        )
+        SELECT
+            ticker,
+            TO_CHAR(month, 'YYYY-MM') AS month,
+            ROUND((close_price - open_price) / NULLIF(open_price, 0) * 100, 2) AS monthly_return
+        FROM monthly_prices
+        ORDER BY ticker, month
+    """
+    results = query_snowflake(query)
+    return {
+        'type': 'monthly_returns',
+        'data': results,
+        'count': len(results)
+    }
+
+
 def get_market_summary() -> dict:
     """Get market summary statistics"""
     query = """
@@ -197,6 +236,7 @@ def get_market_summary() -> dict:
         'type': 'market_summary',
         'data': results[0] if results else {}
     }
+
 
 
 def lambda_handler(event, context):
@@ -220,6 +260,8 @@ def lambda_handler(event, context):
             result = get_volatility_analysis(days=days)
         elif method == 'summary':
             result = get_market_summary()
+        elif method == 'heatmap':
+            result = get_monthly_returns()
         elif method == 'history':
             ticker = query_params.get('ticker', '').upper()
             if not ticker:
