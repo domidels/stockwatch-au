@@ -1226,7 +1226,7 @@ const PageCorrelation = () => {
     };
     setLoading(true);
     Promise.all([load(ticker1), load(ticker2)]).finally(() => setLoading(false));
-  }, [ticker1, ticker2]);
+  }, [ticker1, ticker2]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filterByDays = (data) => {
     if (!corrDays || !data) return data || [];
