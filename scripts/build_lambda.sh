@@ -9,8 +9,9 @@ set -e
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LAMBDA_DIR="$PROJECT_ROOT/lambda"
 
-ECR_ACCOUNT="964165005298"
-ECR_REGION="ap-southeast-2"
+# Resolve the AWS account ID at runtime — no hardcoded value in source control.
+ECR_ACCOUNT="${AWS_ACCOUNT_ID:-$(aws sts get-caller-identity --query Account --output text)}"
+ECR_REGION="${AWS_REGION:-ap-southeast-2}"
 ECR_BASE="${ECR_ACCOUNT}.dkr.ecr.${ECR_REGION}.amazonaws.com"
 
 FUNCTION_INGESTION="stockwatch-au-ingestion"

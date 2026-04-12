@@ -9,9 +9,16 @@ set -e
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
 
-S3_BUCKET="stockwatch-au-data-964165005298-ap-southeast-2-frontend"
-CLOUDFRONT_DISTRIBUTION_ID="E1QFS79XPGAE9H"
-REGION="ap-southeast-2"
+# Load environment variables from .env if it exists
+if [ -f "$PROJECT_ROOT/.env" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$PROJECT_ROOT/.env"
+  set +a
+fi
+S3_BUCKET="${FRONTEND_S3_BUCKET:?Error: FRONTEND_S3_BUCKET env var is required}"
+CLOUDFRONT_DISTRIBUTION_ID="${CLOUDFRONT_DISTRIBUTION_ID:?Error: CLOUDFRONT_DISTRIBUTION_ID env var is required}"
+REGION="${AWS_REGION:-ap-southeast-2}"
 
 # ── Colours ───────────────────────────────────────
 GREEN='\033[0;32m'
@@ -42,4 +49,4 @@ aws cloudfront create-invalidation \
   --paths "/*" \
   --output text --query 'Invalidation.Id' | xargs -I{} echo "Invalidation ID: {}"
 
-log "Done. Dashboard: https://d3pydjy6229hps.cloudfront.net"
+log "Done."

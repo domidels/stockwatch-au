@@ -18,6 +18,10 @@ terraform {
   # }
 }
 
+# Retrieve the current AWS account ID at plan time — used in IAM ARNs
+# to avoid hardcoding the account number in source control.
+data "aws_caller_identity" "current" {}
+
 provider "aws" {
   region = var.aws_region
 

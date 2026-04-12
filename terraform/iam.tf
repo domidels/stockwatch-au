@@ -191,7 +191,7 @@ resource "aws_iam_user_policy" "script_lambda_access" {
           "lambda:UpdateFunctionCode",
           "lambda:GetFunction"
         ]
-        Resource = "arn:aws:lambda:ap-southeast-2:964165005298:function:${var.project_name}-*"
+        Resource = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${var.project_name}-*"
       }
     ]
   })

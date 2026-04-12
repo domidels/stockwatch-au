@@ -15,7 +15,10 @@ for key in ('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'):
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
 logger = logging.getLogger(__name__)
 
-S3_BUCKET = 'stockwatch-au-data-964165005298-ap-southeast-2'
+# Read from environment — set S3_BUCKET in your .env file (see .env.example).
+S3_BUCKET = os.environ.get('S3_BUCKET')
+if not S3_BUCKET:
+    raise RuntimeError("S3_BUCKET environment variable is required. Check your .env file.")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lambda'))
 os.environ['S3_BUCKET'] = S3_BUCKET

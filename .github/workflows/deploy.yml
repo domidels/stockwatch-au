@@ -9,8 +9,9 @@ env:
   AWS_REGION: ap-southeast-2
   FUNCTION_INGESTION: stockwatch-au-ingestion
   FUNCTION_API: stockwatch-au-api-handler
-  FRONTEND_BUCKET: stockwatch-au-data-964165005298-ap-southeast-2-frontend
-  CLOUDFRONT_DISTRIBUTION_ID: E1QFS79XPGAE9H
+  # FRONTEND_BUCKET and CLOUDFRONT_DISTRIBUTION_ID are stored as GitHub repository
+  # secrets (Settings > Secrets and variables > Actions) to avoid exposing
+  # account-specific identifiers in source control.
 
 jobs:
   # ── Job 1: Deploy Lambda images ──────────────────
@@ -108,10 +109,10 @@ jobs:
 
       - name: Deploy to S3
         run: |
-          aws s3 sync frontend/build s3://${{ env.FRONTEND_BUCKET }} --delete
+          aws s3 sync frontend/build s3://${{ secrets.FRONTEND_BUCKET }} --delete
 
       - name: Invalidate CloudFront cache
         run: |
           aws cloudfront create-invalidation \
-            --distribution-id ${{ env.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
             --paths "/*"
