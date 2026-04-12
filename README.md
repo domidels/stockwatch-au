@@ -2,8 +2,6 @@
 
 End-to-end data pipeline and analytics dashboard for ASX (Australian Stock Exchange) market data. Built with a serverless AWS architecture, Infrastructure as Code, and a React frontend.
 
-Live dashboard: https://d3pydjy6229hps.cloudfront.net
-
 ---
 
 ## Architecture
@@ -20,8 +18,11 @@ Lambda API (triggered by API Gateway)
   |-- Snowflake queries  -->  JSON response
       |
 React Dashboard (CloudFront + S3)
-  |-- Market Overview page  (aggregated stats, top performers, volatility)
-  |-- Stock Explorer page   (price history per ticker, line chart)
+  |-- Market Overview      (aggregated stats, top performers, volatility)
+  |-- Stock Explorer       (price history, monthly/weekly bar chart)
+  |-- Monthly Heatmap      (month-by-month returns across all tickers)
+  |-- Correlation          (rolling cross-correlation between two stocks)
+  |-- Stock Clusters (PCA) (dimensionality reduction of 12-month return profiles)
 ```
 
 
@@ -53,7 +54,8 @@ stockwatch-au/
 |-- frontend/
 |   |-- src/
 |   |   |-- App.jsx
-|   |   |-- Dashboard.jsx         # Two-page dashboard (Overview + Stock Explorer)
+|   |   |-- Dashboard.jsx         # Multi-page dashboard (Overview, Explorer, Heatmap, Correlation, PCA)
+|   |   |-- Dashboard.css         # Mobile responsive layout (hamburger menu, table scroll)
 |   |   |-- api.js                # API client
 |   |   |-- index.js
 |   |   |-- index.css
@@ -113,9 +115,10 @@ ASX_ANALYTICS
 | Endpoint | Description |
 |----------|-------------|
 | GET /data/summary | Market overview (stock count, date range, avg price, avg volume) |
-| GET /data/top_performers | Top 10 stocks by average closing price |
-| GET /data/volatility | Top 10 most volatile stocks (std dev of daily returns) |
-| GET /data/history?ticker=CBA.AX | Full price history for a given ticker |
+| GET /data/top_performers?days=N | Total return and volatility per ticker over N days |
+| GET /data/volatility?days=N | Daily return standard deviation per ticker over N days |
+| GET /data/history?ticker=CBA.AX&days=N | OHLCV price history for a given ticker |
+| GET /data/heatmap | Monthly returns per ticker (used by Heatmap and PCA pages) |
 
 ---
 
@@ -218,10 +221,12 @@ Every push to `main` automatically:
 3. Builds and deploys the React frontend to S3
 4. Invalidates CloudFront cache
 
-Required GitHub secrets:
+Required GitHub secrets (Settings > Secrets and variables > Actions):
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `API_GATEWAY_URL`
+- `FRONTEND_BUCKET`
+- `CLOUDFRONT_DISTRIBUTION_ID`
 
 ---
 

@@ -30,11 +30,18 @@ ASX_STOCKS = [
 
 
 def get_snowflake_credentials():
+    """Retrieve Snowflake connection parameters from AWS Secrets Manager."""
     response = secrets_client.get_secret_value(SecretId=SNOWFLAKE_SECRET_NAME)
     return json.loads(response['SecretString'])
 
 
 def get_snowflake_connection(credentials):
+    """
+    Open a Snowflake connection using private-key authentication.
+
+    The private key is stored as a PEM string inside the Secrets Manager
+    JSON payload, then converted to DER format as required by the connector.
+    """
     import snowflake.connector
     from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives.serialization import (
@@ -221,6 +228,14 @@ def is_table_empty(conn) -> bool:
 
 
 def lambda_handler(event, context):
+    """
+    Main Lambda entry point, triggered daily by EventBridge after ASX close.
+
+    On the first invocation (empty table) it fetches 6 months of history.
+    On subsequent runs it fetches only the previous trading day (incremental).
+    A specific period can be forced by passing {"period": "3y"} in the event
+    payload, which is useful for one-off backfills.
+    """
     run_date = datetime.utcnow()
 
     try:

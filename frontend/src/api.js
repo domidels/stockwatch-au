@@ -1,13 +1,24 @@
+/**
+ * api.js — HTTP client for the StockWatch AU API Gateway.
+ *
+ * The base URL is injected at build time via the REACT_APP_API_URL
+ * environment variable (frontend/.env.local for local dev, or as a
+ * GitHub Actions secret for CI/CD deployments).
+ *
+ * All exported functions normalise Snowflake's uppercase column names
+ * to lowercase before returning data to components.
+ */
+
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://your-api-gateway-url.execute-api.ap-southeast-2.amazonaws.com/dev';
+const API_BASE_URL = process.env.REACT_APP_API_URL || '';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000
 });
 
-// Snowflake returns column names in UPPERCASE — normalise to lowercase
+// Recursively convert object keys to lowercase to normalise Snowflake responses.
 const lowerKeys = (obj) => {
   if (Array.isArray(obj)) return obj.map(lowerKeys);
   if (obj && typeof obj === 'object') {
