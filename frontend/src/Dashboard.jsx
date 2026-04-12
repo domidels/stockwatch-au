@@ -787,7 +787,7 @@ const PageExplorer = ({ ticker, setTicker }) => {
   }, [ticker]);
 
   const cacheKey = `${ticker}-${explorerDays}`;
-  const priceHistory = cache[cacheKey] || [];
+  const priceHistory = React.useMemo(() => cache[cacheKey] || [], [cache, cacheKey]);
 
   const periodLabel = PERIOD_LABELS[explorerDays] ?? 'All-Period';
 
