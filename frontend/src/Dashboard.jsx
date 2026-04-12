@@ -69,6 +69,13 @@ const IconCorrelation = () => (
   </svg>
 );
 
+const IconCluster = () => (
+  <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><circle cx="12" cy="5" r="2"/>
+    <line x1="5" y1="19" x2="12" y2="5"/><line x1="19" y1="19" x2="12" y2="5"/><line x1="5" y1="19" x2="19" y2="19"/>
+  </svg>
+);
+
 // ── Constants ──────────────────────────────────────────────
 const BLUE = '#0072B2';
 const BLUE_LIGHT = '#d6eaf8';
@@ -234,6 +241,7 @@ const Sidebar = ({ activePage, setActivePage, menuOpen, setMenuOpen }) => (
         { id: 'overview', label: 'Market Overview', icon: <IconBarChart /> },
         { id: 'heatmap', label: 'Monthly Heatmap', icon: <IconGrid /> },
         { id: 'correlation', label: 'Correlation', icon: <IconCorrelation /> },
+        { id: 'clusters', label: 'Stock Clusters', icon: <IconCluster /> },
         { id: 'info', label: 'Stock Info', icon: <IconInfo /> },
       ].map(({ id, label, icon }) => {
         const active = activePage === id;
@@ -1357,6 +1365,47 @@ const dailyReturns = (priceData) => {
   }));
 };
 
+// ── PCA via NIPALS ────────────────────────────────────────
+// X: n×p matrix (n stocks, p months), already centered
+// Returns top nComponents score vectors + % variance explained
+const runPCA = (X, nComponents = 5) => {
+  const p = X[0].length;
+  const totalVar = X.reduce((s, row) => s + row.reduce((s2, v) => s2 + v * v, 0), 0);
+  let Xr = X.map(row => [...row]);
+  const eigenvalues = [], scoreVecs = [], loadingVecs = [];
+  for (let k = 0; k < nComponents; k++) {
+    let t = Xr.map(row => row[0]);
+    for (let iter = 0; iter < 300; iter++) {
+      const tSS = t.reduce((s, v) => s + v * v, 0);
+      if (tSS < 1e-14) break;
+      const load = Array(p).fill(0).map((_, j) => // eslint-disable-line no-loop-func
+        t.reduce((s, ti, i) => s + Xr[i][j] * ti, 0) / tSS
+      );
+      const loadNorm = Math.sqrt(load.reduce((s, v) => s + v * v, 0)) || 1;
+      const loadU = load.map(v => v / loadNorm);
+      const tNew = Xr.map(row => row.reduce((s, v, j) => s + v * loadU[j], 0)); // eslint-disable-line no-loop-func
+      const change = tNew.reduce((s, v, i) => s + (v - t[i]) ** 2, 0); // eslint-disable-line no-loop-func
+      t = tNew;
+      if (change < 1e-12) break;
+    }
+    const tSS = t.reduce((s, v) => s + v * v, 0);
+    if (tSS < 1e-14) break;
+    const load = Array(p).fill(0).map((_, j) => // eslint-disable-line no-loop-func
+      t.reduce((s, ti, i) => s + Xr[i][j] * ti, 0) / tSS
+    );
+    const loadNorm = Math.sqrt(load.reduce((s, v) => s + v * v, 0)) || 1;
+    const loadU = load.map(v => v / loadNorm);
+    eigenvalues.push(tSS);
+    scoreVecs.push(t);
+    loadingVecs.push(loadU);
+    Xr = Xr.map((row, i) => row.map((v, j) => v - t[i] * loadU[j]));
+  }
+  const explainedVar = eigenvalues.map(e =>
+    parseFloat((totalVar > 0 ? e / totalVar * 100 : 0).toFixed(1))
+  );
+  return { scoreVecs, loadingVecs, eigenvalues, explainedVar };
+};
+
 // ── Page: Correlation ──────────────────────────────────────
 const PageCorrelation = () => {
   const [ticker1, setTicker1] = useState('CBA.AX');
@@ -1568,6 +1617,315 @@ const PageCorrelation = () => {
   );
 };
 
+// ── Correlation Circle (SVG) ──────────────────────────────
+const CorrelCircle = ({ data }) => {
+  const [hov, setHov] = useState(null);
+  const size = 420, cx = 210, cy = 210, rad = 158;
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
+      <svg width={size} height={size} style={{ overflow: 'visible' }}>
+        <circle cx={cx} cy={cy} r={rad} fill="none" stroke="#e8e8e8" strokeWidth={1.5} />
+        <circle cx={cx} cy={cy} r={rad / 2} fill="none" stroke="#f0f0f0" strokeWidth={1} strokeDasharray="3 3" />
+        <line x1={cx - rad - 16} y1={cy} x2={cx + rad + 16} y2={cy} stroke="#e0e0e0" strokeDasharray="4 4" />
+        <line x1={cx} y1={cy - rad - 16} x2={cx} y2={cy + rad + 16} stroke="#e0e0e0" strokeDasharray="4 4" />
+        <text x={cx + rad + 10} y={cy + 4} fontSize={10} fill="#8c8c8c" fontWeight={600}>PC1 +</text>
+        <text x={cx - rad - 10} y={cy + 4} fontSize={10} fill="#8c8c8c" textAnchor="end">− PC1</text>
+        <text x={cx} y={cy - rad - 10} fontSize={10} fill="#8c8c8c" textAnchor="middle">PC2 +</text>
+        <text x={cx} y={cy + rad + 18} fontSize={10} fill="#8c8c8c" textAnchor="middle">− PC2</text>
+        {data.map((d, i) => {
+          const x2 = cx + d.r1 * rad;
+          const y2 = cy - d.r2 * rad;
+          const isHov = hov === i;
+          const col = isHov ? BLUE : ORANGE;
+          return (
+            <g key={i} style={{ cursor: 'pointer' }}
+              onMouseEnter={() => setHov(i)} onMouseLeave={() => setHov(null)}>
+              <line x1={cx} y1={cy} x2={x2} y2={y2} stroke={col} strokeWidth={isHov ? 2.5 : 1.5} />
+              <circle cx={x2} cy={y2} r={isHov ? 5 : 3.5} fill={col} />
+              <text x={x2 + (d.r1 >= 0 ? 7 : -7)} y={y2 + (d.r2 <= 0 ? 13 : -6)}
+                fontSize={isHov ? 11 : 9} fontWeight={isHov ? 700 : 400}
+                fill={isHov ? '#1e2a3a' : '#595959'}
+                textAnchor={d.r1 >= 0 ? 'start' : 'end'}>
+                {d.label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      {hov !== null && (
+        <div style={{
+          position: 'absolute', top: 8, right: 8,
+          background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8,
+          padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13, minWidth: 160
+        }}>
+          <p style={{ fontWeight: 700, color: '#1e2a3a', marginBottom: 6 }}>{data[hov].label}</p>
+          <p style={{ color: BLUE, marginBottom: 2 }}>corr. PC1: <strong>{data[hov].r1 > 0 ? '+' : ''}{data[hov].r1}</strong></p>
+          <p style={{ color: GREEN }}>corr. PC2: <strong>{data[hov].r2 > 0 ? '+' : ''}{data[hov].r2}</strong></p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Page: Stock Clusters (PCA) ────────────────────────────
+const CAT_NAMES = Object.keys(CATEGORIES);
+
+const PagePCA = () => {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedCats, setSelectedCats] = useState(new Set(CAT_NAMES));
+
+  const toggleCat = (cat) =>
+    setSelectedCats(prev => {
+      const next = new Set(prev);
+      next.has(cat) ? next.delete(cat) : next.add(cat);
+      return next;
+    });
+  const toggleAll = () =>
+    setSelectedCats(prev => prev.size === CAT_NAMES.length ? new Set() : new Set(CAT_NAMES));
+
+  useEffect(() => {
+    fetchMonthlyReturns()
+      .then(setData)
+      .catch(() => setError('Failed to load data'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const pcaResult = React.useMemo(() => {
+    if (!data.length) return null;
+    const allMonths = [...new Set(data.map(d => d.month))].sort();
+    const last12 = allMonths.slice(-12);
+    const matrix = ASX_TICKERS.map(ticker =>
+      last12.map(month => {
+        const entry = data.find(d => d.ticker === ticker && d.month === month);
+        return entry ? parseFloat(entry.monthly_return) : 0;
+      })
+    );
+    // Center per column (month)
+    const colMeans = last12.map((_, j) =>
+      matrix.reduce((s, row) => s + row[j], 0) / matrix.length
+    );
+    const centered = matrix.map(row => row.map((v, j) => v - colMeans[j]));
+    const { scoreVecs, loadingVecs, eigenvalues, explainedVar } = runPCA(centered, 5);
+    const points = ASX_TICKERS.map((ticker, i) => ({
+      ticker,
+      x: parseFloat((scoreVecs[0]?.[i] ?? 0).toFixed(3)),
+      y: parseFloat((scoreVecs[1]?.[i] ?? 0).toFixed(3)),
+      color: tickerColor(ticker),
+    }));
+    const screeData = explainedVar.map((v, i) => ({
+      name: `PC${i + 1}`,
+      pct: v,
+      cumul: parseFloat(explainedVar.slice(0, i + 1).reduce((s, x) => s + x, 0).toFixed(1)),
+    }));
+    // Correlation circle: r_jk = loading_jk × sqrt(ev_k) / sqrt(colSS_j)
+    // Gives coordinates in [-1, 1] representing correlation of each month with PC axis
+    const colSS = last12.map((_, j) =>
+      centered.reduce((s, row) => s + row[j] * row[j], 0)
+    );
+    const fmtMonth = m => {
+      const [y, mo] = m.split('-');
+      return new Date(parseInt(y), parseInt(mo) - 1, 1)
+        .toLocaleDateString('en-AU', { month: 'short', year: '2-digit' });
+    };
+    const correlCircle = last12.map((month, j) => {
+      const ss = colSS[j] || 1;
+      const r1 = (loadingVecs[0]?.[j] ?? 0) * Math.sqrt(eigenvalues[0] ?? 0) / Math.sqrt(ss);
+      const r2 = (loadingVecs[1]?.[j] ?? 0) * Math.sqrt(eigenvalues[1] ?? 0) / Math.sqrt(ss);
+      return { label: fmtMonth(month), r1: parseFloat(r1.toFixed(3)), r2: parseFloat(r2.toFixed(3)) };
+    });
+    const fmtMonthLong = m => {
+      const [y, mo] = m.split('-');
+      return new Date(parseInt(y), parseInt(mo) - 1, 1)
+        .toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
+    };
+    return {
+      points, screeData, correlCircle, explainedVar,
+      range: `${fmtMonthLong(last12[0])} – ${fmtMonthLong(last12[last12.length - 1])}`,
+      pc1pct: explainedVar[0], pc2pct: explainedVar[1],
+      cumul2: parseFloat((explainedVar[0] + explainedVar[1]).toFixed(1)),
+    };
+  }, [data]);
+
+  const PCATooltip = ({ active, payload }) => {
+    if (!active || !payload?.length) return null;
+    const d = payload[0]?.payload;
+    if (!d) return null;
+    const info = STOCK_INFO.find(s => s.ticker === d.ticker);
+    return (
+      <div style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8, padding: '12px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13, maxWidth: 280 }}>
+        <p style={{ fontWeight: 700, color: '#1e2a3a', marginBottom: 2 }}>{d.ticker}</p>
+        {info && <p style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 8 }}>{info.company} · {info.sector}</p>}
+        <p style={{ color: '#595959', marginBottom: 2 }}>PC1: <strong>{d.x > 0 ? '+' : ''}{d.x}</strong></p>
+        <p style={{ color: '#595959' }}>PC2: <strong>{d.y > 0 ? '+' : ''}{d.y}</strong></p>
+        {info && <p style={{ color: '#595959', fontSize: 12, lineHeight: 1.5, borderTop: '1px solid #f0f0f0', paddingTop: 8, marginTop: 8 }}>{info.description}</p>}
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <div style={{ background: '#fff', padding: '16px 32px', borderBottom: '1px solid #f0f0f0', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2a3a' }}>Stock Clusters</h1>
+        <p style={{ fontSize: 13, color: '#8c8c8c', marginTop: 2 }}>
+          PCA · 12-month return profiles{pcaResult ? ` · ${pcaResult.range}` : ''}
+        </p>
+      </div>
+
+      <div style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+            <div style={{ width: 36, height: 36, border: `3px solid ${BLUE_LIGHT}`, borderTopColor: BLUE, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          </div>
+        ) : error ? (
+          <p style={{ color: RED, textAlign: 'center', padding: 40 }}>{error}</p>
+        ) : pcaResult ? (
+          <>
+            {/* Category filter pills */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+              <button
+                onClick={toggleAll}
+                style={{
+                  padding: '5px 13px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  border: `1.5px solid ${BLUE}`, background: selectedCats.size === CAT_NAMES.length ? BLUE : 'transparent',
+                  color: selectedCats.size === CAT_NAMES.length ? '#fff' : BLUE, transition: 'all 0.15s',
+                }}
+              >
+                {selectedCats.size === CAT_NAMES.length ? 'Deselect All' : 'Select All'}
+              </button>
+              {CAT_NAMES.map(cat => {
+                const active = selectedCats.has(cat);
+                const col = CATEGORIES[cat].color;
+                return (
+                  <button key={cat} onClick={() => toggleCat(cat)} style={{
+                    padding: '5px 13px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    border: `1.5px solid ${col}`, background: active ? col : 'transparent',
+                    color: active ? '#fff' : col, transition: 'all 0.15s',
+                  }}>
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Biplot */}
+            <div style={{ marginBottom: 24 }}>
+              <SectionCard
+                title={`PC1 (${pcaResult.pc1pct}%) × PC2 (${pcaResult.pc2pct}%) — Stock Position Map`}
+                icon={<IconCluster />}
+                hint={"Each dot = one stock projected onto the two main axes of variation.\nStocks close together = similar return profile over 12 months → limited diversification.\nStocks far apart = uncorrelated or opposing patterns → better diversification.\nPC1 usually captures the broad market factor (all stocks moving together).\nPC2 often separates defensive sectors (healthcare, retail) from cyclical ones (mining, banking)."}
+              >
+                <p style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 16 }}>
+                  PC1 + PC2 explain <strong style={{ color: BLUE }}>{pcaResult.cumul2}%</strong> of total return variance · Dot colour = sector · Hover for details
+                </p>
+                <ResponsiveContainer width="100%" height={460}>
+                  <ScatterChart margin={{ top: 20, right: 30, bottom: 40, left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis type="number" dataKey="x" name="PC1"
+                      tick={{ fontSize: 11, fill: '#8c8c8c' }} axisLine={false} tickLine={false}
+                    >
+                      <Label value={`← PC1 (${pcaResult.pc1pct}% variance) →`} offset={-10} position="insideBottom" style={{ fontSize: 11, fill: '#8c8c8c' }} />
+                    </XAxis>
+                    <YAxis type="number" dataKey="y" name="PC2"
+                      tick={{ fontSize: 11, fill: '#8c8c8c' }} axisLine={false} tickLine={false}
+                    >
+                      <Label value={`PC2 (${pcaResult.pc2pct}%)`} angle={-90} position="insideLeft" style={{ fontSize: 11, fill: '#8c8c8c' }} />
+                    </YAxis>
+                    <ZAxis range={[60, 60]} />
+                    <ReferenceLine x={0} stroke="#e8e8e8" strokeDasharray="4 4" />
+                    <ReferenceLine y={0} stroke="#e8e8e8" strokeDasharray="4 4" />
+                    <Tooltip content={<PCATooltip />} cursor={{ strokeDasharray: '3 3' }} />
+                    <Scatter
+                      data={pcaResult.points}
+                      shape={(props) => {
+                        const { cx, cy, payload } = props;
+                        const active = CAT_NAMES.some(cat => selectedCats.has(cat) && CATEGORIES[cat].tickers.includes(payload.ticker));
+                        return (
+                          <g style={{ transition: 'opacity 0.2s' }}>
+                            <circle cx={cx} cy={cy} r={8} fill={active ? payload.color : '#d0d0d0'} fillOpacity={active ? 0.9 : 0.35} stroke="#fff" strokeWidth={1.5} />
+                            <text x={cx} y={cy - 13} textAnchor="middle" fontSize={10} fill={active ? payload.color : '#c0c0c0'} fontWeight={active ? 600 : 400}>
+                              {payload.ticker.replace('.AX', '')}
+                            </text>
+                          </g>
+                        );
+                      }}
+                      isAnimationActive={false}
+                    />
+                  </ScatterChart>
+                </ResponsiveContainer>
+                <p style={{ fontSize: 12, color: '#8c8c8c', lineHeight: 1.7, marginTop: 16, borderTop: '1px solid #f5f5f5', paddingTop: 14 }}>
+                  This biplot projects each stock onto the plane of maximum variance (PC1 × PC2) based on its 12-month return profile.
+                  Stocks that cluster together shared similar return dynamics over the period — adding them to the same portfolio provides limited diversification benefit.
+                  Stocks in opposing quadrants (far left vs far right, or top vs bottom) tend to be weakly correlated or inversely related, making them better candidates for diversification.
+                  The dot colour indicates the GICS sector; use the category filters above to isolate groups and spot intra-sector clustering.
+                </p>
+              </SectionCard>
+            </div>
+
+            {/* Correlation circle */}
+            <div style={{ marginBottom: 24 }}>
+              <SectionCard
+                title="Correlation Circle — Monthly Return vs PC Axes"
+                icon={<IconCorrelation />}
+                hint={"Each arrow = one of the 12 months projected onto the PC axes.\nArrow length = quality of representation (longer = better explained).\nArrows pointing in the same direction = months that moved stocks similarly.\nOpposite directions = months with opposing return patterns.\nClose to the unit circle = month well captured by PC1 + PC2.\nHover an arrow to see the exact correlation values."}
+              >
+                <p style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 16 }}>
+                  Arrow length = correlation with the axis (max = 1 = perfectly explained) · Hover for exact values
+                </p>
+                <CorrelCircle data={pcaResult.correlCircle} />
+                <p style={{ fontSize: 12, color: '#8c8c8c', lineHeight: 1.7, marginTop: 16, borderTop: '1px solid #f5f5f5', paddingTop: 14 }}>
+                  Each arrow represents one of the 12 months, projected onto the PC1 × PC2 plane.
+                  The arrow's length indicates how well that month is explained by the two principal components — an arrow reaching the outer circle means PC1 and PC2 together fully capture that month's variation.
+                  Arrows pointing in the same direction correspond to months where stocks moved in a similar way.
+                  Arrows pointing in opposite directions indicate months with contrasting return patterns across the portfolio.
+                  Months clustered near the centre are poorly represented by PC1/PC2 and may require additional components to be understood.
+                </p>
+              </SectionCard>
+            </div>
+
+            {/* Scree plot */}
+            <SectionCard
+              title="Variance Explained per Component"
+              icon={<IconBarChart />}
+              hint={"Each bar = % of total monthly return variance captured by that principal component.\nPC1 alone typically explains 30–50% for correlated assets like ASX stocks.\nA steep drop after PC1/PC2 means the data has strong common structure.\nCumulative % is shown in the tooltip and above the chart."}
+            >
+              <p style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 16 }}>
+                Cumulative PC1→PC5: <strong style={{ color: BLUE }}>{pcaResult.screeData[Math.min(4, pcaResult.screeData.length - 1)]?.cumul ?? '—'}%</strong>
+              </p>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={pcaResult.screeData} margin={{ bottom: 10, left: 10 }} barSize={48}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#8c8c8c' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#8c8c8c' }} axisLine={false} tickLine={false}
+                    tickFormatter={v => `${v}%`} domain={[0, 'auto']} />
+                  <Tooltip content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0].payload;
+                    return (
+                      <div style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8, padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13 }}>
+                        <p style={{ fontWeight: 700, color: '#1e2a3a', marginBottom: 4 }}>{d.name}</p>
+                        <p style={{ color: BLUE }}>Variance: <strong>{d.pct}%</strong></p>
+                        <p style={{ color: '#8c8c8c', fontSize: 12 }}>Cumulative: {d.cumul}%</p>
+                      </div>
+                    );
+                  }} />
+                  <Bar dataKey="pct" radius={[4, 4, 0, 0]}>
+                    {pcaResult.screeData.map((_, i) => (
+                      <Cell key={i} fill={i === 0 ? BLUE : i === 1 ? GREEN : '#b0c4de'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </SectionCard>
+          </>
+        ) : null}
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </>
+  );
+};
+
 // ── Main App ───────────────────────────────────────────────
 const MobileHeader = ({ onOpen }) => (
   <div className="mobile-header">
@@ -1658,6 +2016,7 @@ export const Dashboard = () => {
         <div style={{ display: activePage === 'explorer' ? 'block' : 'none' }}><PageExplorer ticker={ticker} setTicker={setTicker} /></div>
         <div style={{ display: activePage === 'info' ? 'block' : 'none' }}><PageStockInfo /></div>
         <div style={{ display: activePage === 'correlation' ? 'block' : 'none' }}><PageCorrelation /></div>
+        <div style={{ display: activePage === 'clusters' ? 'block' : 'none' }}><PagePCA /></div>
         {lastUpdated && (
           <p style={{ textAlign: 'center', color: '#bfbfbf', fontSize: 12, padding: '16px 0 32px' }}>
             Last updated at {lastUpdated} · Powered by Snowflake & AWS
