@@ -57,7 +57,7 @@ ORDER BY volatility_std DESC
 LIMIT 10;
 
 -- =====================================================
--- 3. SECTOR ANALYSIS (simulated)
+-- 3. SECTOR ANALYSIS
 -- =====================================================
 
 -- Query: Performance by "sector" (based on ticker patterns)

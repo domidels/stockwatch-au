@@ -283,7 +283,7 @@ def main():
 
         loader.run_sample_queries()
 
-        logger.info("✅ ASX data successfully loaded into Snowflake!")
+        logger.info("ASX data successfully loaded into Snowflake!")
 
     except Exception as e:
         logger.error(f"Data loading failed: {e}")

@@ -1,0 +1,134 @@
+/* ── Mobile header (hamburger bar) ───────────────────────── */
+.mobile-header {
+  display: none;
+}
+
+/* ── Sidebar overlay backdrop ────────────────────────────── */
+.sidebar-overlay {
+  display: none;
+}
+
+/* ── Responsive breakpoint: tablet / phone ───────────────── */
+@media (max-width: 768px) {
+
+  /* Layout: stack vertically on mobile */
+  .dashboard-layout {
+    flex-direction: column;
+  }
+
+  /* Sidebar becomes a slide-in panel */
+  .sidebar {
+    position: fixed !important;
+    top: 0;
+    left: -220px;
+    width: 220px !important;
+    min-width: 220px !important;
+    height: 100vh;
+    z-index: 500;
+    transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: none;
+  }
+
+  .sidebar.open {
+    left: 0;
+    box-shadow: 6px 0 32px rgba(0, 0, 0, 0.35);
+  }
+
+  /* Dark overlay behind open sidebar */
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 499;
+    animation: overlayFadeIn 0.2s ease;
+  }
+
+  /* Sticky top bar with hamburger */
+  .mobile-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    height: 52px;
+    background: #1e2a3a;
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    flex-shrink: 0;
+  }
+
+  .hamburger-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 7px;
+    border-radius: 7px;
+    color: rgba(255, 255, 255, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .hamburger-btn:hover,
+  .hamburger-btn:active {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+  }
+
+  .mobile-title {
+    color: #fff;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.01em;
+  }
+
+  .mobile-subtitle {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 11px;
+    margin-left: auto;
+  }
+
+  /* Main content takes full width */
+  .main-content {
+    flex: 1;
+    width: 100%;
+    overflow: auto;
+  }
+
+  /* Tighten page padding on mobile */
+  .main-content h1 {
+    font-size: 18px !important;
+  }
+
+  /* ── Stock Explorer: x-axis date labels ──────────────────── */
+  /* Recharts renders SVG <text> for axis ticks — reduce size */
+  .recharts-xAxis .recharts-text {
+    font-size: 9px !important;
+  }
+
+  /* ── All tables: horizontal scroll only when needed ─────── */
+  /* display:block on <table> enables overflow-x without       */
+  /* breaking column alignment (thead/tbody stay native).      */
+  .main-content table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Cells: no wrapping so the scrollbar only appears when     */
+  /* content is genuinely wider than the screen.               */
+  .main-content table th,
+  .main-content table td {
+    white-space: nowrap;
+    padding: 8px 8px !important;
+    font-size: 12px !important;
+  }
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

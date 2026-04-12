@@ -216,7 +216,7 @@ def main():
         filepath = extractor.save_to_parquet(df)
         logger.info(f"Extraction complete. File saved to: {filepath}")
         return filepath
-    else:sudo apt-get update -qq && sudo apt-get install -y docker.io && sudo systemctl start docker && sudo usermod -aG docker $USER
+    else:
         logger.error("Extraction failed - no data retrieved")
         return None
 

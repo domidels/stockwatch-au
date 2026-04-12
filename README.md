@@ -24,7 +24,6 @@ React Dashboard (CloudFront + S3)
   |-- Stock Explorer page   (price history per ticker, line chart)
 ```
 
-**Monthly cost: < $1**
 
 ---
 

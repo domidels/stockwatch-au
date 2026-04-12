@@ -1,15 +1,15 @@
 # Terraform Deployment Guide - StockWatch AU
 
-## 🔐 Security First - No Credentials in Git!
+## Security First - No Credentials in Git!
 
 All sensitive files are in `.gitignore`:
-- `terraform.tfvars` (your credentials)
+- `terraform.tfvars` (credentials)
 - `*.tfstate` (Terraform state)
 - `.terraform/` (providers)
 
 ---
 
-## 📋 Prerequisites
+## Prerequisites
 
 1. **AWS Account** with permissions for:
    - S3 buckets
@@ -32,7 +32,7 @@ All sensitive files are in `.gitignore`:
 
 ---
 
-## 🚀 Deployment Steps
+## Deployment Steps
 
 ### Step 1: Prepare Configuration
 
@@ -103,7 +103,7 @@ terraform output
 ```
 
 **Important outputs:**
-- `api_gateway_endpoint`: Your API URL
+- `api_gateway_endpoint`: API URL
 - `cloudfront_domain_name`: Frontend URL
 - `script_user_access_key`: For `aws configure`
 - `script_user_secret_key`: For `aws configure`
@@ -121,7 +121,7 @@ chmod 600 ~/.aws/stockwatch_*.txt
 
 ---
 
-## 🔒 Configure Credentials
+## Configure Credentials
 
 ### Local Machine (for your scripts)
 
@@ -148,7 +148,7 @@ aws secretsmanager create-secret \
 
 ---
 
-## 📦 Deploy Frontend
+## Deploy Frontend
 
 ```bash
 # Build React app
@@ -169,11 +169,11 @@ aws cloudfront create-invalidation \
   --paths "/*"
 ```
 
-**Frontend is now live!** 🎉
+**Frontend is now live!** 
 
 ---
 
-## 🔄 Update Frontend
+## Update Frontend
 
 After code changes:
 
@@ -187,7 +187,7 @@ aws cloudfront create-invalidation --distribution-id ${DIST_ID} --paths "/*"
 
 ---
 
-## 💰 Cost Monitoring
+## Cost Monitoring
 
 Check AWS costs:
 
@@ -204,11 +204,11 @@ Expected costs:
 - **Lambda**: ~$0.20/month (free tier covers this)
 - **API Gateway**: Free for <1M requests
 - **CloudFront**: ~$0.085 per GB
-- **Total**: $2-4/month ✅
+- **Total**: $2-4/month
 
 ---
 
-## 🗑️ Cleanup (If Needed)
+## Cleanup (If Needed)
 
 **Warning: This deletes everything!**
 
@@ -222,7 +222,7 @@ terraform destroy
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Authentication Error
 ```bash
@@ -259,7 +259,7 @@ aws cloudfront create-invalidation \
 
 ---
 
-## 📚 Resources
+## Resources
 
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest)
 - [AWS Free Tier](https://aws.amazon.com/free/)

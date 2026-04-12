@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import './Dashboard.css';
 import {
   XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, LineChart, Line,
@@ -83,13 +84,12 @@ const SIDEBAR_BG = '#1e2a3a';
 
 // Okabe-Ito colorblind-safe palette
 const CATEGORIES = {
-  Banking:    { tickers: ['CBA.AX','WBC.AX','NAB.AX','ANZ.AX','MQG.AX'], color: '#0072B2' },
-  Mining:     { tickers: ['BHP.AX','RIO.AX','FMG.AX'],                   color: '#E69F00' },
-  Healthcare: { tickers: ['CSL.AX','COH.AX','SHL.AX'],                   color: '#009E73' },
-  Retail:     { tickers: ['WES.AX','COL.AX','WOW.AX'],                   color: '#CC79A7' },
-  Technology: { tickers: ['XRO.AX','REA.AX'],                            color: '#56B4E9' },
-  Energy:     { tickers: ['STO.AX'],                                      color: '#D55E00' },
-  Other:      { tickers: ['TLS.AX','GMG.AX','ALL.AX'],                   color: '#555555' },
+  Banking:          { tickers: ['CBA.AX','WBC.AX','NAB.AX','ANZ.AX','MQG.AX'], color: '#0072B2' },
+  'Mining & Energy':{ tickers: ['BHP.AX','RIO.AX','FMG.AX','STO.AX'],          color: '#E69F00' },
+  Healthcare:       { tickers: ['CSL.AX','COH.AX','SHL.AX'],                   color: '#009E73' },
+  Retail:           { tickers: ['WES.AX','COL.AX','WOW.AX'],                   color: '#CC79A7' },
+  Technology:       { tickers: ['XRO.AX','ALL.AX','TLS.AX'],                   color: '#56B4E9' },
+  'Real Estate':    { tickers: ['REA.AX','GMG.AX'],                            color: '#D55E00' },
 };
 const ASX_TICKERS = [
   'ALL.AX', 'ANZ.AX', 'BHP.AX', 'CBA.AX', 'COH.AX',
@@ -109,10 +109,10 @@ const STOCK_INFO = [
   { ticker: 'ANZ.AX', company: 'ANZ Banking Group', sector: 'Banking', description: 'One of Australia\'s four major banks with a strong presence across Asia-Pacific. Provides retail, business and institutional banking services.' },
   { ticker: 'WES.AX', company: 'Wesfarmers', sector: 'Retail / Conglomerate', description: 'Diversified conglomerate owning Bunnings (hardware), Kmart, Target and chemical businesses. One of Australia\'s largest employers.' },
   { ticker: 'GMG.AX', company: 'Goodman Group', sector: 'Real Estate', description: 'Global manager of logistics warehouses and industrial properties. Benefits from e-commerce growth. Operates across 3 continents.' },
-  { ticker: 'TLS.AX', company: 'Telstra', sector: 'Telecommunications', description: 'Australia\'s leading telecom operator. Provides mobile, fixed-line and internet services for individuals and businesses. Rolling out 5G network.' },
+  { ticker: 'TLS.AX', company: 'Telstra', sector: 'Technology / Telecom', description: 'Australia\'s leading telecom operator. Provides mobile, fixed-line and internet services for individuals and businesses. Rolling out 5G network.' },
   { ticker: 'COL.AX', company: 'Coles Group', sector: 'Retail / Supermarkets', description: 'Australia\'s second largest supermarket chain after Woolworths. Also operates liquor stores and fuel outlets. Demerged from Wesfarmers in 2018.' },
-  { ticker: 'ALL.AX', company: 'Aristocrat Leisure', sector: 'Gaming / Entertainment', description: 'Global manufacturer of slot machines and mobile game developer. Present in casinos across 90 countries. Strong growth in digital gaming.' },
-  { ticker: 'REA.AX', company: 'REA Group', sector: 'Tech / Real Estate', description: 'Operator of realestate.com.au, Australia\'s leading property portal. 62% owned by News Corp. Also present in India and the United States.' },
+  { ticker: 'ALL.AX', company: 'Aristocrat Leisure', sector: 'Technology / Gaming', description: 'Global manufacturer of slot machines and mobile game developer. Present in casinos across 90 countries. Strong growth in digital gaming.' },
+  { ticker: 'REA.AX', company: 'REA Group', sector: 'Real Estate', description: 'Operator of realestate.com.au, Australia\'s leading property portal. 62% owned by News Corp. Also present in India and the United States.' },
   { ticker: 'STO.AX', company: 'Santos', sector: 'Energy / Oil & Gas', description: 'Australian producer of oil and liquefied natural gas (LNG). Operates primarily in Australia, PNG and Timor-Leste. Key supplier to Asia.' },
   { ticker: 'XRO.AX', company: 'Xero', sector: 'Technology / SaaS', description: 'New Zealand-based cloud accounting software provider for SMEs. Market leader in Australia and New Zealand. Expanding in the UK and US.' },
   { ticker: 'WOW.AX', company: 'Woolworths Group', sector: 'Retail / Supermarkets', description: 'Australia\'s largest retail group. Operates supermarkets, liquor stores (BWS, Dan Murphy\'s) and Big W. One of the country\'s largest employers.' },
@@ -122,6 +122,7 @@ const STOCK_INFO = [
 ];
 
 const PERIOD_LABELS = {
+  30: '1-Month',
   90: '3-Month',
   180: '6-Month',
   365: '1-Year',
@@ -148,22 +149,44 @@ const StatCard = ({ label, value, icon, color, bg }) => (
   </div>
 );
 
-const SectionCard = ({ title, icon, children }) => (
-  <div style={{
-    background: '#fff', borderRadius: 12,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
-    border: '1px solid #f0f0f0', overflow: 'hidden'
-  }}>
-    <div style={{
-      padding: '16px 24px', borderBottom: '1px solid #f5f5f5',
-      display: 'flex', alignItems: 'center', gap: 8
-    }}>
-      <span style={{ color: BLUE }}>{icon}</span>
-      <h2 style={{ fontSize: 16, fontWeight: 600, color: '#1e2a3a' }}>{title}</h2>
+const SectionCard = ({ title, icon, children, hint }) => {
+  const [showHint, setShowHint] = useState(false);
+  const [hintPos, setHintPos] = useState({ x: 0, y: 0 });
+  return (
+    <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.07)', border: '1px solid #f0f0f0', overflow: 'hidden' }}>
+      <div style={{ padding: '16px 24px', borderBottom: '1px solid #f5f5f5', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ color: BLUE }}>{icon}</span>
+        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#1e2a3a', flex: 1 }}>{title}</h2>
+        {hint && (
+          <span
+            onMouseEnter={e => { setShowHint(true); setHintPos({ x: e.clientX, y: e.clientY }); }}
+            onMouseMove={e => setHintPos({ x: e.clientX, y: e.clientY })}
+            onMouseLeave={() => setShowHint(false)}
+            style={{ color: '#bfbfbf', cursor: 'help', display: 'flex', alignItems: 'center', padding: 4, flexShrink: 0 }}
+          >
+            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          </span>
+        )}
+      </div>
+      <div style={{ padding: 24 }}>{children}</div>
+      {showHint && hint && (
+        <div style={{
+          position: 'fixed', left: hintPos.x + 16, top: hintPos.y - 8, zIndex: 2000,
+          background: '#1e2a3a', color: '#fff', borderRadius: 10,
+          padding: '14px 18px', boxShadow: '0 8px 24px rgba(0,0,0,0.22)',
+          fontSize: 12, maxWidth: 310, lineHeight: 1.65, pointerEvents: 'none'
+        }}>
+          <p style={{ fontWeight: 700, marginBottom: 8, color: '#56B4E9', fontSize: 13 }}>How to read this chart</p>
+          {hint.split('\n').map((line, i, arr) => (
+            <p key={i} style={{ marginBottom: i < arr.length - 1 ? 6 : 0, opacity: 0.9 }}>{line}</p>
+          ))}
+        </div>
+      )}
     </div>
-    <div style={{ padding: 24 }}>{children}</div>
-  </div>
-);
+  );
+};
 
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -182,8 +205,8 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 // ── Sidebar ────────────────────────────────────────────────
-const Sidebar = ({ activePage, setActivePage }) => (
-  <div style={{
+const Sidebar = ({ activePage, setActivePage, menuOpen, setMenuOpen }) => (
+  <div className={`sidebar${menuOpen ? ' open' : ''}`} style={{
     width: 200, background: SIDEBAR_BG, minHeight: '100vh',
     display: 'flex', flexDirection: 'column', flexShrink: 0
   }}>
@@ -207,15 +230,15 @@ const Sidebar = ({ activePage, setActivePage }) => (
     <nav style={{ padding: '16px 12px', flex: 1 }}>
       <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '8px 12px', marginBottom: 4 }}>Dashboard</p>
       {[
+        { id: 'explorer', label: 'Stock Explorer', icon: <IconSearch /> },
         { id: 'overview', label: 'Market Overview', icon: <IconBarChart /> },
         { id: 'heatmap', label: 'Monthly Heatmap', icon: <IconGrid /> },
-        { id: 'explorer', label: 'Stock Explorer', icon: <IconSearch /> },
         { id: 'correlation', label: 'Correlation', icon: <IconCorrelation /> },
         { id: 'info', label: 'Stock Info', icon: <IconInfo /> },
       ].map(({ id, label, icon }) => {
         const active = activePage === id;
         return (
-          <div key={id} onClick={() => setActivePage(id)} style={{
+          <div key={id} onClick={() => { setActivePage(id); setMenuOpen(false); }} style={{
             display: 'flex', alignItems: 'center', gap: 10,
             padding: '10px 12px', borderRadius: 8, marginBottom: 2, cursor: 'pointer',
             background: active ? 'rgba(22,119,255,0.15)' : 'transparent',
@@ -237,6 +260,7 @@ const Sidebar = ({ activePage, setActivePage }) => (
 );
 
 // ── Period filter buttons ──────────────────────────────────
+// Used by Correlation page (unchanged)
 const PERIODS = [
   { label: '3M', days: 90 },
   { label: '6M', days: 180 },
@@ -245,9 +269,15 @@ const PERIODS = [
   { label: 'All', days: null },
 ];
 
-const PeriodFilter = ({ selected, onChange }) => (
-  <div style={{ display: 'flex', gap: 4 }}>
-    {PERIODS.map(p => (
+// Used by Overview and Explorer (includes short periods)
+const PERIODS_EXTENDED = [
+  { label: '1M', days: 30 },
+  ...PERIODS,
+];
+
+const PeriodFilter = ({ selected, onChange, periods = PERIODS }) => (
+  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+    {periods.map(p => (
       <button key={p.label} onClick={() => onChange(p.days)} style={{
         padding: '5px 12px', borderRadius: 6, border: '1px solid',
         borderColor: selected === p.days ? BLUE : '#d9d9d9',
@@ -393,7 +423,7 @@ const PageOverview = ({ summary }) => {
     const prefetchAll = async () => {
       setLoading(true);
       const results = await Promise.all(
-        PERIODS.map(p =>
+        PERIODS_EXTENDED.map(p =>
           Promise.all([fetchTopPerformers(p.days), fetchVolatilityAnalysis(p.days)])
             .then(([tp, vol]) => ({ key: String(p.days), tp, vol }))
         )
@@ -463,9 +493,9 @@ const PageOverview = ({ summary }) => {
       }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Period</span>
         <div style={{ width: 1, height: 20, background: '#e8e8e8' }} />
-        <PeriodFilter selected={days} onChange={setDays} />
+        <PeriodFilter selected={days} onChange={setDays} periods={PERIODS_EXTENDED} />
         <span style={{ fontSize: 12, color: '#8c8c8c', marginLeft: 4 }}>
-          {days ? `Last ${PERIODS.find(p => p.days === days)?.label}` : 'All available data'}
+          {days ? `Last ${PERIODS_EXTENDED.find(p => p.days === days)?.label}` : 'All available data'}
         </span>
       </div>
 
@@ -511,7 +541,9 @@ const PageOverview = ({ summary }) => {
       ) : (
         <>
           <div style={{ marginBottom: 28 }}>
-            <SectionCard title="Risk / Return — Volatility vs Total Return" icon={<IconZap />}>
+            <SectionCard title="Risk / Return — Volatility vs Total Return" icon={<IconZap />}
+              hint={"Each dot = one stock. X-axis = daily volatility (σ), Y-axis = total return.\nTop-left ↖ = low risk + high return (ideal). Bottom-right ↘ = high risk + low return (avoid).\nDashed lines split the chart at the portfolio average.\nDot colour = sector."}
+            >
               {/* Category pills — colored */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 13, color: '#8c8c8c', fontWeight: 500 }}>Sector:</span>
@@ -555,7 +587,9 @@ const PageOverview = ({ summary }) => {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 0 }}>
-            <SectionCard title="Total Return % — Ranked Best to Worst" icon={<IconBarChart />}>
+            <SectionCard title="Total Return % — Ranked Best to Worst" icon={<IconBarChart />}
+              hint={"Return = (last close − first close) / first close × 100.\nRanked from best to worst over the selected period.\nGreen = positive return, red = negative.\nThe period selector above applies to all rows."}
+            >
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid #f0f0f0' }}>
@@ -585,7 +619,9 @@ const PageOverview = ({ summary }) => {
               </table>
             </SectionCard>
 
-            <SectionCard title="Daily Volatility % — Ranked Most to Least" icon={<IconZap />}>
+            <SectionCard title="Daily Volatility % — Ranked Most to Least" icon={<IconZap />}
+              hint={"σ = standard deviation of daily % price changes — higher = more erratic.\nAvg change = mean absolute daily move.\nWorst/Best day = single-session extreme return.\nLower σ generally means lower risk."}
+            >
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid #f0f0f0' }}>
@@ -619,6 +655,108 @@ const PageOverview = ({ summary }) => {
   );
 };
 
+// ── Stock Selector with hover tooltip ─────────────────────
+const StockSelector = ({ label, value, onChange, color }) => {
+  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  const selectedInfo = STOCK_INFO.find(s => s.ticker === value);
+  const selectedCat = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(value));
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</span>
+
+      {/* Trigger button */}
+      <div onClick={() => setOpen(o => !o)} style={{
+        position: 'relative', padding: '9px 14px', borderRadius: 8,
+        border: `2px solid ${color}`, fontSize: 14, fontWeight: 700,
+        color: '#1e2a3a', cursor: 'pointer', background: '#fff',
+        display: 'flex', alignItems: 'center', gap: 10, userSelect: 'none', minWidth: 130
+      }}>
+        {selectedCat && <span style={{ width: 8, height: 8, borderRadius: '50%', background: selectedCat[1].color, flexShrink: 0 }} />}
+        <span>{value.replace('.AX', '')}</span>
+        <span style={{ fontSize: 9, color: '#bfbfbf', marginLeft: 'auto' }}>▼</span>
+
+        {/* Dropdown list */}
+        {open && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={e => { e.stopPropagation(); setOpen(false); setHovered(null); }} />
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 100,
+              background: '#fff', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+              border: '1px solid #e8e8e8', padding: '4px 0', minWidth: 150, maxHeight: 300, overflowY: 'auto'
+            }}>
+              {ASX_TICKERS.map(t => {
+                const cat = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(t));
+                const catColor = cat ? cat[1].color : '#8c8c8c';
+                const isSelected = t === value;
+                return (
+                  <div key={t}
+                    onClick={e => { e.stopPropagation(); onChange(t); setOpen(false); setHovered(null); }}
+                    onMouseEnter={e => { setHovered(t); setTooltipPos({ x: e.clientX, y: e.clientY }); }}
+                    onMouseMove={e => setTooltipPos({ x: e.clientX, y: e.clientY })}
+                    onMouseLeave={() => setHovered(null)}
+                    style={{
+                      padding: '8px 14px', cursor: 'pointer', fontSize: 13,
+                      fontWeight: isSelected ? 700 : 400,
+                      color: isSelected ? catColor : '#1e2a3a',
+                      background: isSelected ? catColor + '12' : '#fff',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      transition: 'background 0.1s'
+                    }}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: catColor, flexShrink: 0 }} />
+                    {t.replace('.AX', '')}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Company name + category next to trigger */}
+      {selectedInfo && (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: '#8c8c8c' }}>{selectedInfo.company}</span>
+          {selectedCat && (
+            <span style={{
+              background: selectedCat[1].color + '22', color: selectedCat[1].color,
+              padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600
+            }}>{selectedCat[0]}</span>
+          )}
+        </span>
+      )}
+
+      {/* Hover tooltip */}
+      {hovered && (() => {
+        const info = STOCK_INFO.find(s => s.ticker === hovered);
+        const cat = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(hovered));
+        const catColor = cat ? cat[1].color : '#8c8c8c';
+        return (
+          <div style={{
+            position: 'fixed', left: tooltipPos.x + 16, top: tooltipPos.y - 8, zIndex: 1000,
+            background: '#fff', border: '1px solid #e8e8e8', borderRadius: 10,
+            padding: '12px 16px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            fontSize: 13, maxWidth: 260, pointerEvents: 'none'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ fontWeight: 700, color: '#1e2a3a', fontSize: 14 }}>{hovered.replace('.AX', '')}</span>
+              {cat && <span style={{ background: catColor + '22', color: catColor, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{cat[0]}</span>}
+            </div>
+            {info && <>
+              <p style={{ color: '#595959', fontSize: 12, marginBottom: 6 }}>{info.company}</p>
+              <p style={{ color: '#8c8c8c', fontSize: 11, lineHeight: 1.55, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>{info.description}</p>
+            </>}
+          </div>
+        );
+      })()}
+    </div>
+  );
+};
+
 // ── Page: Stock Explorer ───────────────────────────────────
 const PageExplorer = ({ ticker, setTicker }) => {
   const [cache, setCache] = useState({});   // { 'CBA.AX-null': [...], 'CBA.AX-90': [...] }
@@ -632,7 +770,7 @@ const PageExplorer = ({ ticker, setTicker }) => {
       setError(null);
       try {
         const results = await Promise.all(
-          PERIODS.map(p =>
+          PERIODS_EXTENDED.map(p =>
             fetchStockHistory(t, p.days).then(data => ({ key: `${t}-${p.days}`, data }))
           )
         );
@@ -669,6 +807,67 @@ const PageExplorer = ({ ticker, setTicker }) => {
     return d.toLocaleDateString('en-AU', { month: 'short', year: '2-digit' });
   };
 
+  // Monthly bar chart (6M, 1Y, 2Y, All)
+  // xLabel: "Jan 2024" for January, "" for other months (tick mark only)
+  // tooltip uses fullLabel
+  const monthlyBars = React.useMemo(() => {
+    if (!priceHistory.length) return [];
+    const byMonth = {};
+    priceHistory.forEach(d => {
+      const m = d.date.slice(0, 7);
+      if (!byMonth[m]) byMonth[m] = [];
+      byMonth[m].push(d);
+    });
+    return Object.entries(byMonth)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, days]) => {
+        const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+        const ret = parseFloat(((sorted[sorted.length-1].close - sorted[0].close) / sorted[0].close * 100).toFixed(2));
+        const [year, mon] = month.split('-');
+        const d = new Date(parseInt(year), parseInt(mon) - 1, 1);
+        const monShort = d.toLocaleDateString('en-AU', { month: 'short' });
+        const fullLabel = `${monShort} ${year}`;
+        const xLabel = mon === '01' ? `Jan ${year}` : '';
+        return { xLabel, fullLabel, ret };
+      });
+  }, [priceHistory]);
+
+  // Weekly bar chart (1M, 3M)
+  // Weeks defined by day-of-month: W1=1–7, W2=8–14, W3=15–21, W4=22–28, W5=29–end
+  // xLabel: month name on first week of each new month, "" otherwise
+  const weeklyBars = React.useMemo(() => {
+    if (!priceHistory.length) return [];
+    const byWeek = {};
+    priceHistory.forEach(d => {
+      const monthKey = d.date.slice(0, 7);
+      const day = parseInt(d.date.slice(8, 10));
+      const weekNum = Math.ceil(day / 7);
+      const key = `${monthKey}-W${weekNum}`;
+      if (!byWeek[key]) byWeek[key] = { days: [], monthKey, weekNum };
+      byWeek[key].days.push(d);
+    });
+    const sorted = Object.entries(byWeek).sort(([a], [b]) => a.localeCompare(b));
+    let prevMonth = null;
+    return sorted.map(([, { days, monthKey, weekNum }]) => {
+      const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
+      const ret = parseFloat(((sortedDays[sortedDays.length-1].close - sortedDays[0].close) / sortedDays[0].close * 100).toFixed(2));
+      const [year, mon] = monthKey.split('-');
+      const monName = new Date(parseInt(year), parseInt(mon) - 1, 1).toLocaleDateString('en-AU', { month: 'short' });
+      const startDay = (weekNum - 1) * 7 + 1;
+      const daysInMonth = new Date(parseInt(year), parseInt(mon), 0).getDate();
+      const endDay = Math.min(weekNum * 7, daysInMonth);
+      const fullLabel = `Week ${weekNum} · ${monName} ${startDay}–${endDay}`;
+      const isNewMonth = monthKey !== prevMonth;
+      prevMonth = monthKey;
+      const xLabel = isNewMonth ? monName : '';
+      return { xLabel, fullLabel, ret };
+    });
+  }, [priceHistory]);
+
+  const showMonthlyBars = explorerDays === 180 || explorerDays === 365 || explorerDays === 730 || explorerDays === null;
+  const showWeeklyBars  = explorerDays === 30 || explorerDays === 90;
+  const barData    = showMonthlyBars ? monthlyBars : showWeeklyBars ? weeklyBars : null;
+  const barGrouping = showMonthlyBars ? 'Monthly' : 'Weekly';
 
   return (
     <>
@@ -689,24 +888,11 @@ const PageExplorer = ({ ticker, setTicker }) => {
           padding: '18px 24px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
           border: `1.5px solid ${BLUE_LIGHT}`
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Stock</span>
-            <select
-              value={ticker}
-              onChange={e => setTicker(e.target.value)}
-              style={{
-                padding: '9px 16px', borderRadius: 8, border: `2px solid ${BLUE}`,
-                fontSize: 15, fontWeight: 700, color: '#1e2a3a', cursor: 'pointer',
-                outline: 'none', background: '#fff', fontFamily: 'inherit'
-              }}
-            >
-              {ASX_TICKERS.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
+          <StockSelector label="Stock" value={ticker} onChange={setTicker} color={BLUE} />
           <div style={{ width: 1, height: 32, background: '#e8e8e8' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Period</span>
-            <PeriodFilter selected={explorerDays} onChange={setExplorerDays} />
+            <PeriodFilter selected={explorerDays} onChange={setExplorerDays} periods={PERIODS_EXTENDED} />
           </div>
         </div>
 
@@ -726,7 +912,9 @@ const PageExplorer = ({ ticker, setTicker }) => {
 
         {/* Line chart */}
         <div style={{ marginBottom: 28 }}>
-          <SectionCard title={`Closing Price — ${ticker} (${periodLabel})`} icon={<IconSearch />}>
+          <SectionCard title={`Closing Price — ${ticker} (${periodLabel})`} icon={<IconSearch />}
+            hint={"Daily closing price over the selected period.\nHover the chart for the exact price on any date.\n% change in the stat cards = (last − first close) / first close × 100.\nGaps may appear on non-trading days (weekends, public holidays)."}
+          >
             {loading ? (
               <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 36, height: 36, border: `3px solid ${BLUE_LIGHT}`, borderTopColor: BLUE, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
@@ -762,8 +950,70 @@ const PageExplorer = ({ ticker, setTicker }) => {
           </SectionCard>
         </div>
 
+        {/* Monthly / Weekly return bar chart */}
+        {barData && barData.length > 0 && (
+          <div style={{ marginBottom: 28 }}>
+            <SectionCard
+              title={`${barGrouping} Returns — ${ticker} (${periodLabel})`}
+              icon={<IconBarChart />}
+              hint={showMonthlyBars
+                ? "Each bar = return for one calendar month: (last close − first close) / first close × 100.\nGreen = positive month, red = negative.\nHover a bar for the exact value."
+                : "Each bar = return for one trading week (Mon → Fri close).\nGreen = up week, red = down week.\nHover a bar for the exact value."}
+            >
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={barData} margin={{ bottom: 24, left: 10, right: 10 }} barSize={showMonthlyBars ? 16 : 12}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <XAxis
+                    dataKey="xLabel"
+                    interval={0}
+                    tick={({ x, y, payload }) => {
+                      if (!payload.value) {
+                        // Tick mark only, no label
+                        return <line x1={x} y1={y} x2={x} y2={y + 4} stroke="#d9d9d9" strokeWidth={1} />;
+                      }
+                      return (
+                        <g transform={`translate(${x},${y})`}>
+                          <line x1={0} y1={0} x2={0} y2={4} stroke="#8c8c8c" strokeWidth={1} />
+                          <text x={0} y={10} dy={4} textAnchor="middle" fontSize={10} fontWeight={600} fill="#1e2a3a">{payload.value}</text>
+                        </g>
+                      );
+                    }}
+                    axisLine={{ stroke: '#e8e8e8' }} tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: '#8c8c8c' }}
+                    axisLine={false} tickLine={false}
+                    tickFormatter={v => `${v > 0 ? '+' : ''}${v}%`}
+                  />
+                  <ReferenceLine y={0} stroke="#d9d9d9" strokeWidth={1} />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      return (
+                        <div style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8, padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13 }}>
+                          <p style={{ fontWeight: 700, color: '#1e2a3a', marginBottom: 4 }}>{d.fullLabel}</p>
+                          <p style={{ color: d.ret >= 0 ? GREEN : RED, fontWeight: 600 }}>{d.ret > 0 ? '+' : ''}{d.ret}%</p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="ret" name="Return" radius={[3, 3, 0, 0]}>
+                    {barData.map((d, i) => (
+                      <Cell key={i} fill={d.ret >= 0 ? GREEN : RED} fillOpacity={0.85} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </SectionCard>
+          </div>
+        )}
+
         {/* Last 10 sessions table */}
-        <SectionCard title="Last 10 Sessions" icon={<IconBarChart />}>
+        <SectionCard title="Last 10 Sessions" icon={<IconBarChart />}
+          hint={"OHLC: Open = first trade of the day, High/Low = intraday extremes, Close = last trade.\nGreen close = up day (close ≥ open), red = down day.\nVolume = total number of shares traded that day.\nMost recent session shown first."}
+        >
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '2px solid #f0f0f0' }}>
@@ -911,35 +1161,23 @@ const PageHeatmap = () => {
   const lookup = {};
   data.forEach(d => { lookup[`${d.ticker}-${d.month}`] = d.monthly_return; });
 
-  // Color scale: green positive, red negative, intensity by magnitude (capped at ±10%)
+  // Diverging palette: neutral white at 0, deep green → +10%, deep red → -10%
   const cellColor = (val) => {
-    if (val == null) return '#f5f5f5';
-    const capped = Math.max(-10, Math.min(10, val));
-    const intensity = Math.abs(capped) / 10;
+    if (val == null) return '#eeeeee';
+    const t = Math.min(1, Math.abs(val) / 10);
     if (val >= 0) {
-      const g = Math.round(158 + (1 - intensity) * (245 - 158)); // 009E73 → light
-      const r = Math.round((1 - intensity) * 240);
-      const b = Math.round(115 + (1 - intensity) * (245 - 115));
-      return `rgb(${r},${g},${b})`;
+      return `rgb(${Math.round(247 - t * 221)},${Math.round(247 - t * 125)},${Math.round(247 - t * 185)})`;
     } else {
-      const r = Math.round(213 + (1 - intensity) * (245 - 213));
-      const g = Math.round((1 - intensity) * 240);
-      const b = Math.round((1 - intensity) * 200);
-      return `rgb(${r},${g},${b})`;
+      return `rgb(${Math.round(247 - t * 55)},${Math.round(247 - t * 190)},${Math.round(247 - t * 204)})`;
     }
   };
 
-  const textColor = (val) => {
-    if (val == null) return '#bfbfbf';
-    return Math.abs(val) > 5 ? '#fff' : '#1e2a3a';
-  };
-
-  // Format month label: show only Jan of each year + every month abbreviated
+  // Format month label: always show "Mon YYYY", bold kept for January via fontWeight in cell
   const monthLabel = (m) => {
     const [year, month] = m.split('-');
     const d = new Date(parseInt(year), parseInt(month) - 1, 1);
     const mon = d.toLocaleDateString('en-AU', { month: 'short' });
-    return month === '01' ? `${mon} ${year}` : mon;
+    return `${mon} ${year}`;
   };
 
 
@@ -963,7 +1201,9 @@ const PageHeatmap = () => {
           <p style={{ color: RED, textAlign: 'center', padding: 40 }}>{error}</p>
         ) : (
           <>
-          <SectionCard title="Monthly Return % per Stock" icon={<IconGrid />}>
+          <SectionCard title="Monthly Return % per Stock" icon={<IconGrid />}
+            hint={"Each cell = monthly return for one stock (%).\nGreen = positive month, red = negative. Intensity = magnitude (capped at ±10%).\nHover a ticker header to see company info.\nMost recent month at the top."}
+          >
             {/* Category filter — colored pills, same as Market Overview */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, color: '#8c8c8c', fontWeight: 500 }}>Sector:</span>
@@ -988,14 +1228,20 @@ const PageHeatmap = () => {
             </div>
 
             {/* Legend */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, fontSize: 12, color: '#8c8c8c', flexWrap: 'wrap' }}>
-              <span>Monthly Return:</span>
-              {[[-10,'≤-10%'],[-5,'-5%'],[-2,'-2%'],[0,'0%'],[2,'+2%'],[5,'+5%'],[10,'≥+10%']].map(([v, label]) => (
-                <span key={v} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ width: 20, height: 14, background: cellColor(v), borderRadius: 3, display: 'inline-block', border: '1px solid #e8e8e8' }} />
-                  {label}
-                </span>
-              ))}
+            <div style={{ marginBottom: 24 }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: '#595959', marginBottom: 8 }}>Monthly Return</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#BF3A2B', minWidth: 42, textAlign: 'right' }}>≤ −10%</span>
+                <div style={{ position: 'relative', height: 18, width: 280, borderRadius: 6, overflow: 'hidden', border: '1px solid #e0e0e0', flexShrink: 0 }}>
+                  <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(to right, rgb(192,57,43), rgb(247,247,247), rgb(26,122,62))` }} />
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#1A7A3E', minWidth: 42 }}>≥ +10%</span>
+              </div>
+              <div style={{ display: 'flex', gap: 0, width: 280, marginLeft: 52, marginTop: 4, justifyContent: 'space-between' }}>
+                {['−5%', '0%', '+5%'].map(l => (
+                  <span key={l} style={{ fontSize: 10, color: '#8c8c8c' }}>{l}</span>
+                ))}
+              </div>
             </div>
 
             {/* Custom tooltip */}
@@ -1023,7 +1269,7 @@ const PageHeatmap = () => {
               <table style={{ borderCollapse: 'separate', borderSpacing: 2, fontSize: 11 }}>
                 <thead>
                   <tr>
-                    <th style={{ width: 90, textAlign: 'left', padding: '6px 10px', color: '#8c8c8c', fontWeight: 600, position: 'sticky', left: 0, background: '#fff', zIndex: 1 }}>Month</th>
+                    <th style={{ width: 108, textAlign: 'left', padding: '6px 10px', color: '#8c8c8c', fontWeight: 600, position: 'sticky', left: 0, background: '#fff', zIndex: 1 }}>Month</th>
                     {tickers.map(ticker => {
                       const catEntry = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(ticker));
                       const catColor = catEntry ? catEntry[1].color : '#8c8c8c';
@@ -1031,7 +1277,7 @@ const PageHeatmap = () => {
                         <th key={ticker}
                           onMouseEnter={e => setTooltip({ ticker, x: e.clientX, y: e.clientY })}
                           onMouseLeave={() => setTooltip(null)}
-                          style={{ minWidth: 52, textAlign: 'center', padding: '6px 4px', color: catColor, fontWeight: 700, whiteSpace: 'nowrap', fontSize: 11, cursor: 'help' }}>
+                          style={{ minWidth: 36, textAlign: 'center', padding: '6px 2px', color: catColor, fontWeight: 700, whiteSpace: 'nowrap', fontSize: 11, cursor: 'help' }}>
                           {ticker.replace('.AX', '')}
                         </th>
                       );
@@ -1053,13 +1299,11 @@ const PageHeatmap = () => {
                         return (
                           <td key={ticker} title={val != null ? `${ticker} ${m}: ${val > 0 ? '+' : ''}${val}%` : 'No data'}
                             style={{
-                              background: cellColor(val), color: textColor(val),
-                              textAlign: 'center', padding: '5px 3px',
-                              borderRadius: 3, fontSize: 10, fontWeight: 600,
-                              minWidth: 52, cursor: 'default',
-                            }}>
-                            {val != null ? `${val > 0 ? '+' : ''}${val}` : ''}
-                          </td>
+                              background: cellColor(val),
+                              padding: '6px 0', borderRadius: 3,
+                              minWidth: 36, cursor: 'default',
+                            }}
+                          />
                         );
                       })}
                     </tr>
@@ -1111,100 +1355,6 @@ const dailyReturns = (priceData) => {
     date: d.date,
     ret: sorted[i].close > 0 ? (d.close - sorted[i].close) / sorted[i].close * 100 : 0
   }));
-};
-
-// ── Stock Selector with hover tooltip ─────────────────────
-const StockSelector = ({ label, value, onChange, color }) => {
-  const [open, setOpen] = useState(false);
-  const [hovered, setHovered] = useState(null);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-
-  const selectedInfo = STOCK_INFO.find(s => s.ticker === value);
-  const selectedCat = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(value));
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <span style={{ fontSize: 12, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</span>
-
-      {/* Trigger button */}
-      <div onClick={() => setOpen(o => !o)} style={{
-        position: 'relative', padding: '9px 14px', borderRadius: 8,
-        border: `2px solid ${color}`, fontSize: 14, fontWeight: 700,
-        color: '#1e2a3a', cursor: 'pointer', background: '#fff',
-        display: 'flex', alignItems: 'center', gap: 10, userSelect: 'none', minWidth: 130
-      }}>
-        {selectedCat && <span style={{ width: 8, height: 8, borderRadius: '50%', background: selectedCat[1].color, flexShrink: 0 }} />}
-        <span>{value.replace('.AX', '')}</span>
-        <span style={{ fontSize: 9, color: '#bfbfbf', marginLeft: 'auto' }}>▼</span>
-
-        {/* Dropdown list */}
-        {open && (
-          <>
-            <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={e => { e.stopPropagation(); setOpen(false); setHovered(null); }} />
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 100,
-              background: '#fff', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-              border: '1px solid #e8e8e8', padding: '4px 0', minWidth: 150, maxHeight: 300, overflowY: 'auto'
-            }}>
-              {ASX_TICKERS.map(t => {
-                const cat = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(t));
-                const catColor = cat ? cat[1].color : '#8c8c8c';
-                const isSelected = t === value;
-                return (
-                  <div key={t}
-                    onClick={e => { e.stopPropagation(); onChange(t); setOpen(false); setHovered(null); }}
-                    onMouseEnter={e => { setHovered(t); setTooltipPos({ x: e.clientX, y: e.clientY }); }}
-                    onMouseMove={e => setTooltipPos({ x: e.clientX, y: e.clientY })}
-                    onMouseLeave={() => setHovered(null)}
-                    style={{
-                      padding: '8px 14px', cursor: 'pointer', fontSize: 13,
-                      fontWeight: isSelected ? 700 : 400,
-                      color: isSelected ? catColor : '#1e2a3a',
-                      background: isSelected ? catColor + '12' : '#fff',
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      transition: 'background 0.1s'
-                    }}
-                  >
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: catColor, flexShrink: 0 }} />
-                    {t.replace('.AX', '')}
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Company name next to trigger */}
-      {selectedInfo && (
-        <span style={{ fontSize: 12, color: '#8c8c8c' }}>{selectedInfo.company}</span>
-      )}
-
-      {/* Hover tooltip */}
-      {hovered && (() => {
-        const info = STOCK_INFO.find(s => s.ticker === hovered);
-        const cat = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(hovered));
-        const catColor = cat ? cat[1].color : '#8c8c8c';
-        return (
-          <div style={{
-            position: 'fixed', left: tooltipPos.x + 16, top: tooltipPos.y - 8, zIndex: 1000,
-            background: '#fff', border: '1px solid #e8e8e8', borderRadius: 10,
-            padding: '12px 16px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-            fontSize: 13, maxWidth: 260, pointerEvents: 'none'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <span style={{ fontWeight: 700, color: '#1e2a3a', fontSize: 14 }}>{hovered.replace('.AX', '')}</span>
-              {cat && <span style={{ background: catColor + '22', color: catColor, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>{cat[0]}</span>}
-            </div>
-            {info && <>
-              <p style={{ color: '#595959', fontSize: 12, marginBottom: 6 }}>{info.company}</p>
-              <p style={{ color: '#8c8c8c', fontSize: 11, lineHeight: 1.55, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>{info.description}</p>
-            </>}
-          </div>
-        );
-      })()}
-    </div>
-  );
 };
 
 // ── Page: Correlation ──────────────────────────────────────
@@ -1332,7 +1482,9 @@ const PageCorrelation = () => {
         ) : error ? (
           <p style={{ color: RED, textAlign: 'center', padding: 40 }}>{error}</p>
         ) : ccfData.length > 0 ? (
-          <SectionCard title={`CCF — ${ticker1.replace('.AX','')} vs ${ticker2.replace('.AX','')} · Lags -20 to +20`} icon={<IconCorrelation />}>
+          <SectionCard title={`CCF — ${ticker1.replace('.AX','')} vs ${ticker2.replace('.AX','')} · Lags -20 to +20`} icon={<IconCorrelation />}
+            hint={"Each bar = Pearson cross-correlation at a given lag (trading days).\nLag 0 = same-day correlation (blue bar).\nPositive lag: Stock A leads B. Negative lag: B leads A.\nOrange dashes = significance threshold (±2/√n).\nGreen/red bars = statistically significant."}
+          >
             <p style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 16 }}>
               Positive lag: <strong>{ticker1.replace('.AX','')}</strong> leads <strong>{ticker2.replace('.AX','')}</strong> ·
               Negative lag: <strong>{ticker2.replace('.AX','')}</strong> leads · Dashed lines = significance threshold (±{sigThreshold})
@@ -1375,7 +1527,9 @@ const PageCorrelation = () => {
         {/* Monthly correlation chart */}
         {monthlyCorr.length > 1 && (
           <div style={{ marginTop: 24 }}>
-          <SectionCard title={`Monthly Correlation at Lag 0 — ${ticker1.replace('.AX','')} vs ${ticker2.replace('.AX','')}`} icon={<IconCorrelation />}>
+          <SectionCard title={`Monthly Correlation at Lag 0 — ${ticker1.replace('.AX','')} vs ${ticker2.replace('.AX','')}`} icon={<IconCorrelation />}
+            hint={"Pearson correlation of daily returns computed separately per calendar month.\nShows whether the relationship is stable or evolves over time.\nA rising trend = stocks are becoming more correlated.\nOrange dashes = significance threshold (±2/√n)."}
+          >
             <p style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 16 }}>
               Pearson correlation of daily returns computed separately for each calendar month · Dashed lines = significance threshold
             </p>
@@ -1415,8 +1569,23 @@ const PageCorrelation = () => {
 };
 
 // ── Main App ───────────────────────────────────────────────
+const MobileHeader = ({ onOpen }) => (
+  <div className="mobile-header">
+    <button className="hamburger-btn" onClick={onOpen} aria-label="Open menu">
+      <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+        <line x1="3" y1="6" x2="21" y2="6" strokeLinecap="round" />
+        <line x1="3" y1="12" x2="21" y2="12" strokeLinecap="round" />
+        <line x1="3" y1="18" x2="21" y2="18" strokeLinecap="round" />
+      </svg>
+    </button>
+    <span className="mobile-title">StockWatch AU</span>
+    <span className="mobile-subtitle">ASX Analytics</span>
+  </div>
+);
+
 export const Dashboard = () => {
-  const [activePage, setActivePage] = useState('overview');
+  const [activePage, setActivePage] = useState('explorer');
+  const [menuOpen, setMenuOpen] = useState(false);
   const [ticker, setTicker] = useState('CBA.AX');
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1440,16 +1609,19 @@ export const Dashboard = () => {
   };
 
   if (loading) return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#f0f2f5' }}>
-      <Sidebar activePage={activePage} setActivePage={setActivePage} />
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{
-            width: 44, height: 44, border: `3px solid ${BLUE_LIGHT}`,
-            borderTopColor: BLUE, borderRadius: '50%',
-            animation: 'spin 0.8s linear infinite', margin: '0 auto 16px'
-          }} />
-          <p style={{ color: '#8c8c8c', fontWeight: 500 }}>Loading ASX data...</p>
+    <div className="dashboard-layout" style={{ display: 'flex', minHeight: '100vh', background: '#f0f2f5' }}>
+      <Sidebar activePage={activePage} setActivePage={setActivePage} menuOpen={false} setMenuOpen={() => {}} />
+      <div className="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <MobileHeader onOpen={() => {}} />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{
+              width: 44, height: 44, border: `3px solid ${BLUE_LIGHT}`,
+              borderTopColor: BLUE, borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite', margin: '0 auto 16px'
+            }} />
+            <p style={{ color: '#8c8c8c', fontWeight: 500 }}>Loading ASX data...</p>
+          </div>
         </div>
       </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -1457,25 +1629,30 @@ export const Dashboard = () => {
   );
 
   if (error) return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#f0f2f5' }}>
-      <Sidebar activePage={activePage} setActivePage={setActivePage} />
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ background: '#fff', borderRadius: 12, padding: 40, textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
-          <p style={{ color: RED, marginBottom: 16, fontWeight: 500 }}>Error: {error}</p>
-          <button onClick={loadData} style={{
-            background: BLUE, color: '#fff', border: 'none',
-            borderRadius: 8, padding: '10px 24px', cursor: 'pointer',
-            fontWeight: 600, fontSize: 14
-          }}>Retry</button>
+    <div className="dashboard-layout" style={{ display: 'flex', minHeight: '100vh', background: '#f0f2f5' }}>
+      <Sidebar activePage={activePage} setActivePage={setActivePage} menuOpen={false} setMenuOpen={() => {}} />
+      <div className="main-content" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <MobileHeader onOpen={() => {}} />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 40, textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
+            <p style={{ color: RED, marginBottom: 16, fontWeight: 500 }}>Error: {error}</p>
+            <button onClick={loadData} style={{
+              background: BLUE, color: '#fff', border: 'none',
+              borderRadius: 8, padding: '10px 24px', cursor: 'pointer',
+              fontWeight: 600, fontSize: 14
+            }}>Retry</button>
+          </div>
         </div>
       </div>
     </div>
   );
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#f0f2f5' }}>
-      <Sidebar activePage={activePage} setActivePage={setActivePage} />
-      <div style={{ flex: 1, overflow: 'auto' }}>
+    <div className="dashboard-layout" style={{ display: 'flex', minHeight: '100vh', background: '#f0f2f5' }}>
+      {menuOpen && <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />}
+      <Sidebar activePage={activePage} setActivePage={setActivePage} menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+      <div className="main-content" style={{ flex: 1, overflow: 'auto' }}>
+        <MobileHeader onOpen={() => setMenuOpen(true)} />
         <div style={{ display: activePage === 'overview' ? 'block' : 'none' }}><PageOverview summary={summary} /></div>
         <div style={{ display: activePage === 'heatmap' ? 'block' : 'none' }}><PageHeatmap /></div>
         <div style={{ display: activePage === 'explorer' ? 'block' : 'none' }}><PageExplorer ticker={ticker} setTicker={setTicker} /></div>

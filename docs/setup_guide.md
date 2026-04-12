@@ -137,7 +137,7 @@ Execute queries from `snowflake/queries/asx_analytics.sql`
 
 ---
 
-## 💰 **Cost Optimization Details**
+## **Cost Optimization Details**
 
 ### **S3 Costs** (Target: <$2/month)
 - **STANDARD**: $0.023/GB
@@ -163,7 +163,7 @@ aws ce get-cost-and-usage \
 
 ---
 
-## 🔧 **Troubleshooting**
+## **Troubleshooting**
 
 ### **Common Issues**
 
@@ -202,7 +202,7 @@ pip install -r requirements.txt -v
 
 ---
 
-## 📈 **Portfolio Showcase**
+## **Portfolio Showcase**
 
 ### **Demo Queries for Interviews**
 
@@ -218,14 +218,3 @@ pip install -r requirements.txt -v
 - **Cost Control**: Auto-suspend, storage classes
 
 ---
-
-## 🎯 **Next Steps**
-
-1. **Schedule Daily Updates** (cron job)
-2. **Add More Analytics** (technical indicators)
-3. **Create Dashboard** (Tableau/Streamlit)
-4. **Add Alerts** (price movements)
-
-**Total Setup Time**: ~2 hours
-**Monthly Cost**: <$5
-**Portfolio Value**: Enterprise-level data pipeline ✨
