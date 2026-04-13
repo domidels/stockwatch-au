@@ -257,7 +257,10 @@ def get_pca_analysis() -> dict:
     scores = pca.fit_transform(matrix)      # shape: (n_tickers, n_components)
     loadings = pca.components_              # shape: (n_components, n_months)
     explained = [round(float(v * 100), 1) for v in pca.explained_variance_ratio_]
-    eigenvalues = pca.explained_variance_   # actual eigenvalues (not ratios)
+    # singular_values_**2 = S_k² = sum of squares of score vectors
+    # This matches the NIPALS eigenvalue definition used in the correlation circle formula.
+    # pca.explained_variance_ would be S_k²/(n-1) and would shrink the circle.
+    eigenvalues = pca.singular_values_ ** 2
 
     points = [
         {
