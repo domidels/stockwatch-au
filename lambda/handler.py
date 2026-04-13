@@ -257,6 +257,7 @@ def get_pca_analysis() -> dict:
     scores = pca.fit_transform(matrix)      # shape: (n_tickers, n_components)
     loadings = pca.components_              # shape: (n_components, n_months)
     explained = [round(float(v * 100), 1) for v in pca.explained_variance_ratio_]
+    eigenvalues = pca.explained_variance_   # actual eigenvalues (not ratios)
 
     points = [
         {
@@ -270,7 +271,6 @@ def get_pca_analysis() -> dict:
     # Correlation circle: correlation of each month variable with each PC axis
     # r_jk = loading_k[j] * sqrt(eigenvalue_k) / sqrt(col_SS[j])
     col_ss = (matrix ** 2).sum(axis=0)  # variance of each month column
-    eigenvalues = pca.explained_variance_  # actual eigenvalues (not ratios)
 
     def fmt_month(m):
         """'2025-04' → 'Apr 25'"""
