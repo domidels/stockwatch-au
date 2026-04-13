@@ -9,7 +9,6 @@ import logging
 import boto3
 from botocore.exceptions import ClientError
 from pathlib import Path
-from typing import Optional
 
 # Configure logging
 logging.basicConfig(
@@ -47,7 +46,7 @@ class S3Uploader:
 
     def upload_file(self,
                    file_path: str,
-                   s3_key: Optional[str] = None,
+                   s3_key: str = None,
                    storage_class: str = 'STANDARD_IA') -> bool:
         """
         Upload file to S3 with cost-optimized storage class
@@ -97,94 +96,16 @@ class S3Uploader:
             logger.error(f"Upload failed: {e}")
             return False
 
-    def upload_with_lifecycle(self,
-                             file_path: str,
-                             s3_key: Optional[str] = None) -> bool:
-        """
-        Upload file with intelligent lifecycle management
-        Uses STANDARD initially, then transitions to cheaper classes
-        """
-        # Start with STANDARD for immediate access
-        success = self.upload_file(file_path, s3_key, storage_class='STANDARD')
-
-        if success and s3_key:
-            # Set lifecycle policy for cost optimization
-            self._set_lifecycle_policy(s3_key)
-
-        return success
-
-    def _set_lifecycle_policy(self, s3_key: str):
-        """Set lifecycle policy to automatically move to cheaper storage"""
-        try:
-            # This would be set at bucket level, but showing the concept
-            logger.info(f"Lifecycle policy concept: {s3_key} will transition to IA after 30 days")
-            # In production, you'd set bucket lifecycle rules:
-            # - After 30 days: STANDARD_IA
-            # - After 90 days: GLACIER
-            # - After 365 days: DEEP_ARCHIVE
-        except Exception as e:
-            logger.warning(f"Could not set lifecycle policy: {e}")
-
-    def list_bucket_contents(self, prefix: str = "") -> list:
-        """List contents of bucket with optional prefix"""
-        try:
-            response = self.s3_client.list_objects_v2(
-                Bucket=self.bucket_name,
-                Prefix=prefix
-            )
-
-            objects = response.get('Contents', [])
-            return [obj['Key'] for obj in objects]
-
-        except ClientError as e:
-            logger.error(f"Could not list bucket contents: {e}")
-            return []
-
-    def get_storage_cost_estimate(self, file_size_mb: float) -> dict:
-        """
-        Estimate monthly storage costs for different classes
-        Based on Sydney region pricing (as of 2024)
-        """
-        # Pricing per GB per month (Sydney region)
-        pricing = {
-            'STANDARD': 0.023,      # $0.023/GB
-            'STANDARD_IA': 0.0125,  # $0.0125/GB (46% savings)
-            'GLACIER': 0.0041,      # $0.0041/GB (82% savings)
-            'DEEP_ARCHIVE': 0.0012  # $0.0012/GB (95% savings)
-        }
-
-        file_size_gb = file_size_mb / 1024
-
-        estimates = {}
-        for storage_class, price_per_gb in pricing.items():
-            monthly_cost = file_size_gb * price_per_gb
-            estimates[storage_class] = round(monthly_cost, 4)
-
-        return estimates
-
 def main():
-    """Main upload function"""
-    # Configuration - update these values
-    BUCKET_NAME = os.getenv('AWS_S3_BUCKET', 'your-asx-data-bucket')
-    DATA_FILE = 'data/asx_data_20241201.parquet'  # Update with actual file
+    """Upload a local parquet file to S3."""
+    BUCKET_NAME = os.getenv('S3_BUCKET')
+    DATA_FILE = os.getenv('DATA_FILE', 'data/asx_data.parquet')
+
+    if not BUCKET_NAME:
+        raise RuntimeError("S3_BUCKET environment variable is required.")
 
     uploader = S3Uploader(bucket_name=BUCKET_NAME)
-
-    # Upload with cost optimization
-    success = uploader.upload_with_lifecycle(DATA_FILE)
-
-    if success:
-        # Show cost comparison
-        file_size = Path(DATA_FILE).stat().st_size / (1024 * 1024)  # MB
-        costs = uploader.get_storage_cost_estimate(file_size)
-
-        logger.info("Monthly storage cost estimates:")
-        for storage_class, cost in costs.items():
-            logger.info(f"  {storage_class}: ${cost}/month")
-
-        logger.info("💡 Using STANDARD_IA saves ~50% vs STANDARD storage!")
-
-    return success
+    return uploader.upload_file(DATA_FILE)
 
 if __name__ == "__main__":
     main()

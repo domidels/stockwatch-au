@@ -10,7 +10,7 @@ import os
 import io
 import logging
 import boto3
-from datetime import datetime, timedelta
+from datetime import datetime
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)

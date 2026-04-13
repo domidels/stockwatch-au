@@ -15,7 +15,6 @@ logger.setLevel(logging.INFO)
 
 # AWS Clients
 secrets_client = boto3.client('secretsmanager')
-s3_client = boto3.client('s3')
 
 # Environment variables
 SNOWFLAKE_SECRET_NAME = os.environ.get('SNOWFLAKE_SECRET_NAME')
