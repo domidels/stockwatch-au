@@ -396,9 +396,11 @@ const RiskReturnScatter = ({ data, volatility, allData, allVolatility, axisLimit
         </YAxis>
         <ZAxis range={[60, 60]} />
         <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-        {/* Quadrant background shading */}
-        <ReferenceArea x1={xDomain[0]} x2={avgVol} y1={avgRet} y2={yDomain[1]} fill="#009E73" fillOpacity={0.06} />
-        <ReferenceArea x1={avgVol} x2={xDomain[1]} y1={yDomain[0]} y2={avgRet} fill="#D55E00" fillOpacity={0.06} />
+        {/* Quadrant background shading — all 4 quadrants */}
+        <ReferenceArea x1={xDomain[0]} x2={avgVol} y1={avgRet} y2={yDomain[1]} fill="#009E73" fillOpacity={0.07} />
+        <ReferenceArea x1={avgVol} x2={xDomain[1]} y1={avgRet} y2={yDomain[1]} fill="#E69F00" fillOpacity={0.07} />
+        <ReferenceArea x1={xDomain[0]} x2={avgVol} y1={yDomain[0]} y2={avgRet} fill="#CC79A7" fillOpacity={0.07} />
+        <ReferenceArea x1={avgVol} x2={xDomain[1]} y1={yDomain[0]} y2={avgRet} fill="#D55E00" fillOpacity={0.07} />
 
         {/* Quadrant lines — based on all stocks, fixed regardless of category filter */}
         <ReferenceLine x={avgVol} stroke="#b0b0b0" strokeWidth={2} strokeDasharray="6 3" />
@@ -407,8 +409,10 @@ const RiskReturnScatter = ({ data, volatility, allData, allVolatility, axisLimit
             const { viewBox } = props;
             return (
               <g>
-                <text x={viewBox.x + 8} y={viewBox.y - 8} fontSize={13} fill="#52c41a" fontWeight={700}>Best ↖</text>
-                <text x={viewBox.x + viewBox.width - 8} y={viewBox.y + 20} fontSize={13} fill="#ff4d4f" fontWeight={700} textAnchor="end">↘ Avoid</text>
+                <text x={viewBox.x + 8} y={viewBox.y - 8} fontSize={12} fill="#009E73" fontWeight={700}>Ideal ↖</text>
+                <text x={viewBox.x + viewBox.width - 8} y={viewBox.y - 8} fontSize={12} fill="#E69F00" fontWeight={700} textAnchor="end">↗ Aggressive</text>
+                <text x={viewBox.x + 8} y={viewBox.y + 18} fontSize={12} fill="#CC79A7" fontWeight={700}>Trap ↙</text>
+                <text x={viewBox.x + viewBox.width - 8} y={viewBox.y + 18} fontSize={12} fill="#D55E00" fontWeight={700} textAnchor="end">↘ Avoid</text>
               </g>
             );
           }}
@@ -564,7 +568,7 @@ const PageOverview = ({ summary }) => {
         <>
           <div style={{ marginBottom: 28 }}>
             <SectionCard title="Risk / Return — Volatility vs Annualised Return" icon={<IconZap />}
-              hint={"Each dot = one stock. X-axis = daily return volatility (σ), Y-axis = annualised return.\nAnnualising makes all periods comparable: a +2% monthly return becomes +24% annualised.\nTop-left ↖ = low risk + high return (ideal). Bottom-right ↘ = high risk + low return (avoid).\nDashed lines split the chart at the portfolio average. Dot colour = sector."}
+              hint={"Each dot = one stock. X-axis = daily return volatility (σ), Y-axis = annualised return.\nAnnualising makes all periods comparable: a +2% monthly return becomes +24% annualised.\nIdeal ↖ = low risk, positive return. Aggressive ↗ = high risk, positive return.\nTrap ↙ = low volatility but negative return — deceptively safe-looking. Avoid ↘ = high risk, negative return.\nDashed lines mark the portfolio average. Dot colour = sector."}
             >
               {/* Category pills — colored */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -588,9 +592,11 @@ const PageOverview = ({ summary }) => {
                   );
                 })}
               </div>
-              <div style={{ marginBottom: 12, display: 'flex', gap: 20, fontSize: 12, color: '#8c8c8c' }}>
-                <span style={{ color: GREEN }}>↖ Top-left = best (low risk, high return)</span>
-                <span style={{ color: RED }}>↘ Bottom-right = avoid (high risk, low return)</span>
+              <div style={{ marginBottom: 12, display: 'flex', gap: 20, fontSize: 12, flexWrap: 'wrap' }}>
+                <span style={{ color: '#009E73', fontWeight: 600 }}>↖ Ideal — low risk, positive return</span>
+                <span style={{ color: '#E69F00', fontWeight: 600 }}>↗ Aggressive — high risk, positive return</span>
+                <span style={{ color: '#CC79A7', fontWeight: 600 }}>↙ Trap — low volatility, negative return</span>
+                <span style={{ color: '#D55E00', fontWeight: 600 }}>↘ Avoid — high risk, negative return</span>
               </div>
               <RiskReturnScatter
                 data={topPerformers.filter(d => {
