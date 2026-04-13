@@ -330,7 +330,11 @@ const ScatterTooltip = ({ active, payload }) => {
   );
 };
 
-const RiskReturnScatter = ({ data, volatility, allData, allVolatility, axisLimits, days }) => {
+// Australian 10-year government bond yield used as the risk-free rate threshold.
+// A stock whose annualised return falls below this line does not compensate for equity risk.
+const RISK_FREE_RATE = 4.0;
+
+const RiskReturnScatter = ({ data, volatility, axisLimits, days, fixedAvgVol }) => {
   const volMap = {};
   volatility.forEach(v => { volMap[v.ticker] = v.volatility_std; });
 
@@ -348,17 +352,11 @@ const RiskReturnScatter = ({ data, volatility, allData, allVolatility, axisLimit
       color: tickerColor(d.ticker),
     }));
 
-  // Quadrant lines always computed on ALL stocks regardless of category filter
-  const allVolMap = {};
-  (allVolatility || volatility).forEach(v => { allVolMap[v.ticker] = v.volatility_std; });
-  const allPoints = (allData || data)
-    .filter(d => allVolMap[d.ticker] != null)
-    .map(d => ({
-      x: parseFloat(allVolMap[d.ticker]),
-      y: parseFloat((parseFloat(d.total_return_pct) * annFactor).toFixed(1)),
-    }));
-  const avgVol = allPoints.length ? allPoints.reduce((s, p) => s + p.x, 0) / allPoints.length : 0;
-  const avgRet = allPoints.length ? allPoints.reduce((s, p) => s + p.y, 0) / allPoints.length : 0;
+  // Fixed reference lines:
+  // - Vertical: long-term average volatility from "All" period (structural baseline)
+  // - Horizontal: 4% risk-free rate (Australian 10Y government bond yield)
+  const refVol = fixedAvgVol ?? 0;
+  const refRet = RISK_FREE_RATE;
 
   const xDomain = axisLimits ? [axisLimits.xMin, axisLimits.xMax] : ['auto', 'auto'];
   const yDomain = axisLimits ? [axisLimits.yMin, axisLimits.yMax] : ['auto', 'auto'];
@@ -403,18 +401,18 @@ const RiskReturnScatter = ({ data, volatility, allData, allVolatility, axisLimit
             <linearGradient id="gradIdeal"      x1="1" y1="1" x2="0" y2="0"><stop offset="0%" stopColor="#009E73" stopOpacity="0"/><stop offset="100%" stopColor="#009E73" stopOpacity="0.35"/></linearGradient>
             <linearGradient id="gradAggressive" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stopColor="#E69F00" stopOpacity="0"/><stop offset="100%" stopColor="#E69F00" stopOpacity="0.35"/></linearGradient>
             <linearGradient id="gradTrap"       x1="1" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#CC79A7" stopOpacity="0"/><stop offset="100%" stopColor="#CC79A7" stopOpacity="0.35"/></linearGradient>
-            <linearGradient id="gradAvoid"      x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#D55E00" stopOpacity="0"/><stop offset="100%" stopColor="#D55E00" stopOpacity="0.35"/></linearGradient>
+            <linearGradient id="gradAvoid"      x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#cc0000" stopOpacity="0.1"/><stop offset="100%" stopColor="#cc0000" stopOpacity="0.55"/></linearGradient>
           </defs>
         )} />
         {/* Quadrant background shading — all 4 quadrants */}
-        <ReferenceArea x1={xDomain[0]} x2={avgVol} y1={avgRet} y2={yDomain[1]} fill="url(#gradIdeal)"      stroke="none" />
-        <ReferenceArea x1={avgVol} x2={xDomain[1]} y1={avgRet} y2={yDomain[1]} fill="url(#gradAggressive)" stroke="none" />
-        <ReferenceArea x1={xDomain[0]} x2={avgVol} y1={yDomain[0]} y2={avgRet} fill="url(#gradTrap)"       stroke="none" />
-        <ReferenceArea x1={avgVol} x2={xDomain[1]} y1={yDomain[0]} y2={avgRet} fill="url(#gradAvoid)"      stroke="none" />
+        <ReferenceArea x1={xDomain[0]} x2={refVol} y1={refRet} y2={yDomain[1]} fill="url(#gradIdeal)"      stroke="none" />
+        <ReferenceArea x1={refVol} x2={xDomain[1]} y1={refRet} y2={yDomain[1]} fill="url(#gradAggressive)" stroke="none" />
+        <ReferenceArea x1={xDomain[0]} x2={refVol} y1={yDomain[0]} y2={refRet} fill="url(#gradTrap)"       stroke="none" />
+        <ReferenceArea x1={refVol} x2={xDomain[1]} y1={yDomain[0]} y2={refRet} fill="url(#gradAvoid)"      stroke="none" />
 
         {/* Quadrant lines — based on all stocks, fixed regardless of category filter */}
-        <ReferenceLine x={avgVol} stroke="#b0b0b0" strokeWidth={2} strokeDasharray="6 3" />
-        <ReferenceLine y={avgRet} stroke="#b0b0b0" strokeWidth={2} strokeDasharray="6 3"
+        <ReferenceLine x={refVol} stroke="#b0b0b0" strokeWidth={2} strokeDasharray="6 3" />
+        <ReferenceLine y={refRet} stroke="#b0b0b0" strokeWidth={2} strokeDasharray="6 3"
           label={(props) => {
             const { viewBox } = props;
             return (
@@ -422,7 +420,7 @@ const RiskReturnScatter = ({ data, volatility, allData, allVolatility, axisLimit
                 <text x={viewBox.x + 8} y={viewBox.y - 8} fontSize={12} fill="#009E73" fontWeight={700}>Ideal ↖</text>
                 <text x={viewBox.x + viewBox.width - 8} y={viewBox.y - 8} fontSize={12} fill="#E69F00" fontWeight={700} textAnchor="end">↗ Aggressive</text>
                 <text x={viewBox.x + 8} y={viewBox.y + 18} fontSize={12} fill="#CC79A7" fontWeight={700}>Trap ↙</text>
-                <text x={viewBox.x + viewBox.width - 8} y={viewBox.y + 18} fontSize={12} fill="#D55E00" fontWeight={700} textAnchor="end">↘ Avoid</text>
+                <text x={viewBox.x + viewBox.width - 8} y={viewBox.y + 18} fontSize={12} fill="#cc0000" fontWeight={700} textAnchor="end">↘ Avoid</text>
               </g>
             );
           }}
@@ -497,11 +495,23 @@ const PageOverview = ({ summary }) => {
     const maxVol = Math.max(...allVol);
     const minRet = Math.min(...allRet);
     const maxRet = Math.max(...allRet);
+
+    // Fixed volatility reference line — average from "All" period only.
+    const allPeriod = cache['null'];
+    let fixedAvgVol = null;
+    if (allPeriod) {
+      const volMap = {};
+      allPeriod.volatility.forEach(v => { volMap[v.ticker] = parseFloat(v.volatility_std); });
+      const pts = allPeriod.topPerformers.filter(d => volMap[d.ticker] != null);
+      if (pts.length) fixedAvgVol = pts.reduce((s, d) => s + volMap[d.ticker], 0) / pts.length;
+    }
+
     return {
       xMin: Math.floor((minVol - pad(maxVol - minVol)) * 10) / 10,
       xMax: Math.ceil((maxVol + pad(maxVol - minVol)) * 10) / 10,
-      yMin: Math.floor((minRet - pad(maxRet - minRet))),
+      yMin: Math.min(Math.floor((minRet - pad(maxRet - minRet))), RISK_FREE_RATE - 5),
       yMax: Math.ceil((maxRet + pad(maxRet - minRet))),
+      fixedAvgVol,
     };
   }, [cache]);
 
@@ -578,7 +588,7 @@ const PageOverview = ({ summary }) => {
         <>
           <div style={{ marginBottom: 28 }}>
             <SectionCard title="Risk / Return — Volatility vs Annualised Return" icon={<IconZap />}
-              hint={"Each dot = one stock. X-axis = daily return volatility (σ), Y-axis = annualised return.\nAnnualising makes all periods comparable: a +2% monthly return becomes +24% annualised.\nIdeal ↖ = low risk, positive return. Aggressive ↗ = high risk, positive return.\nTrap ↙ = low volatility but negative return — deceptively safe-looking. Avoid ↘ = high risk, negative return.\nDashed lines mark the portfolio average. Dot colour = sector."}
+              hint={"Each dot = one stock. X-axis = daily return volatility (σ), Y-axis = annualised return.\nAnnualising makes all periods comparable: a +2% monthly return becomes +24% annualised.\nIdeal ↖ = low volatility + beats risk-free rate. Aggressive ↗ = high volatility + beats risk-free rate.\nTrap ↙ = low volatility but below risk-free rate — deceptively safe-looking. Avoid ↘ = high volatility, below risk-free rate.\nVertical line = long-term average volatility (fixed). Horizontal line = 4% risk-free rate (AU 10Y bond). Dot colour = sector."}
             >
               {/* Category pills — colored */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -606,7 +616,7 @@ const PageOverview = ({ summary }) => {
                 <span style={{ color: '#009E73', fontWeight: 600 }}>↖ Ideal — low risk, positive return</span>
                 <span style={{ color: '#E69F00', fontWeight: 600 }}>↗ Aggressive — high risk, positive return</span>
                 <span style={{ color: '#CC79A7', fontWeight: 600 }}>↙ Trap — low volatility, negative return</span>
-                <span style={{ color: '#D55E00', fontWeight: 600 }}>↘ Avoid — high risk, negative return</span>
+                <span style={{ color: '#cc0000', fontWeight: 600 }}>↘ Avoid — high risk, negative return</span>
               </div>
               <RiskReturnScatter
                 data={topPerformers.filter(d => {
@@ -617,15 +627,15 @@ const PageOverview = ({ summary }) => {
                   const cat = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(d.ticker));
                   return cat && selectedCats.has(cat[0]);
                 })}
-                allData={topPerformers}
-                allVolatility={volatility}
                 axisLimits={axisLimits}
                 days={days}
+                fixedAvgVol={axisLimits?.fixedAvgVol}
               />
               <p style={{ fontSize: 12, color: '#8c8c8c', lineHeight: 1.7, marginTop: 16, borderTop: '1px solid #f5f5f5', paddingTop: 14 }}>
                 Returns are <strong style={{ color: '#1e2a3a' }}>annualised</strong> (scaled to a 12-month equivalent) so that all periods are directly comparable on the same axis.
                 A stock returning +2% over one month is plotted at +24% annualised — the same as a stock returning +24% over a full year.
-                The dashed lines mark the portfolio average volatility and average annualised return, dividing the chart into four quadrants.
+                The <strong style={{ color: '#1e2a3a' }}>vertical line</strong> is fixed at the long-term average daily volatility (computed from all available data) and does not move when you change period.
+                The <strong style={{ color: '#1e2a3a' }}>horizontal line</strong> is fixed at <strong style={{ color: '#1e2a3a' }}>4%</strong> — the Australian 10-year government bond yield (risk-free rate). A stock below this line does not compensate for the risk taken relative to a risk-free investment.
                 {days === null && ' With "All" selected, the raw cumulative return is shown since the total period length varies per ticker.'}
               </p>
             </SectionCard>
@@ -1013,7 +1023,6 @@ const PageExplorer = ({ ticker, setTicker }) => {
                     interval={0}
                     tick={({ x, y, payload }) => {
                       if (!payload.value) {
-                        // Tick mark only, no label
                         return <line x1={x} y1={y} x2={x} y2={y + 4} stroke="#d9d9d9" strokeWidth={1} />;
                       }
                       return (
@@ -1023,14 +1032,14 @@ const PageExplorer = ({ ticker, setTicker }) => {
                         </g>
                       );
                     }}
-                    axisLine={{ stroke: '#e8e8e8' }} tickLine={false}
+                    axisLine={false} tickLine={false}
                   />
                   <YAxis
                     tick={{ fontSize: 11, fill: '#8c8c8c' }}
                     axisLine={false} tickLine={false}
                     tickFormatter={v => `${v > 0 ? '+' : ''}${v}%`}
                   />
-                  <ReferenceLine y={0} stroke="#d9d9d9" strokeWidth={1} />
+                  <ReferenceLine y={0} stroke="#8c8c8c" strokeWidth={1.5} />
                   <Tooltip
                     cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                     content={({ active, payload }) => {
@@ -1044,9 +1053,25 @@ const PageExplorer = ({ ticker, setTicker }) => {
                       );
                     }}
                   />
-                  <Bar dataKey="ret" name="Return" radius={[3, 3, 0, 0]}>
-                    {barData.map((d, i) => (
-                      <Cell key={i} fill={d.ret >= 0 ? GREEN : RED} fillOpacity={0.85} />
+                  <Bar dataKey="ret" name="Return"
+                    shape={(props) => {
+                      const { x, y, width, height, value } = props;
+                      const r = 3;
+                      const pos = value >= 0;
+                      return (
+                        <path
+                          d={pos
+                            ? `M${x},${y + height} L${x},${y + r} Q${x},${y} ${x + r},${y} L${x + width - r},${y} Q${x + width},${y} ${x + width},${y + r} L${x + width},${y + height} Z`
+                            : `M${x},${y} L${x},${y + height - r} Q${x},${y + height} ${x + r},${y + height} L${x + width - r},${y + height} Q${x + width},${y + height} ${x + width},${y + height - r} L${x + width},${y} Z`
+                          }
+                          fill={pos ? GREEN : RED}
+                          fillOpacity={0.85}
+                        />
+                      );
+                    }}
+                  >
+                    {barData.map((_, i) => (
+                      <Cell key={i} />
                     ))}
                   </Bar>
                 </BarChart>
