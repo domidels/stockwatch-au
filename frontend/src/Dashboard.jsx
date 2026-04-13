@@ -400,10 +400,10 @@ const RiskReturnScatter = ({ data, volatility, allData, allVolatility, axisLimit
             of its quadrant (transparent) and darkens toward the outer corner. */}
         <Customized component={() => (
           <defs>
-            <linearGradient id="gradIdeal"      x1="1" y1="1" x2="0" y2="0"><stop offset="0%" stopColor="#009E73" stopOpacity="0"/><stop offset="100%" stopColor="#009E73" stopOpacity="0.18"/></linearGradient>
-            <linearGradient id="gradAggressive" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stopColor="#E69F00" stopOpacity="0"/><stop offset="100%" stopColor="#E69F00" stopOpacity="0.18"/></linearGradient>
-            <linearGradient id="gradTrap"       x1="1" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#CC79A7" stopOpacity="0"/><stop offset="100%" stopColor="#CC79A7" stopOpacity="0.18"/></linearGradient>
-            <linearGradient id="gradAvoid"      x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#D55E00" stopOpacity="0"/><stop offset="100%" stopColor="#D55E00" stopOpacity="0.18"/></linearGradient>
+            <linearGradient id="gradIdeal"      x1="1" y1="1" x2="0" y2="0"><stop offset="0%" stopColor="#009E73" stopOpacity="0"/><stop offset="100%" stopColor="#009E73" stopOpacity="0.35"/></linearGradient>
+            <linearGradient id="gradAggressive" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stopColor="#E69F00" stopOpacity="0"/><stop offset="100%" stopColor="#E69F00" stopOpacity="0.35"/></linearGradient>
+            <linearGradient id="gradTrap"       x1="1" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#CC79A7" stopOpacity="0"/><stop offset="100%" stopColor="#CC79A7" stopOpacity="0.35"/></linearGradient>
+            <linearGradient id="gradAvoid"      x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#D55E00" stopOpacity="0"/><stop offset="100%" stopColor="#D55E00" stopOpacity="0.35"/></linearGradient>
           </defs>
         )} />
         {/* Quadrant background shading — all 4 quadrants */}
