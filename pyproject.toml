@@ -1,0 +1,16 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# E = pycodestyle errors, W = pycodestyle warnings
+# F = pyflakes (undefined names, unused imports)
+# I = isort (import ordering)
+select = ["E", "W", "F", "I"]
+ignore = [
+    "E501",  # line too long — handled by formatter, not enforced here
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Lambda handlers use broad Exception catch for resilience
+"lambda/*.py" = ["E722"]

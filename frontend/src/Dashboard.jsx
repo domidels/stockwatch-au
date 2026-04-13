@@ -11,7 +11,8 @@ import {
   fetchTopPerformers,
   fetchVolatilityAnalysis,
   fetchStockHistory,
-  fetchMonthlyReturns
+  fetchMonthlyReturns,
+  fetchPCA
 } from './api';
 
 // ── Icons ──────────────────────────────────────────────────
@@ -1427,47 +1428,6 @@ const dailyReturns = (priceData) => {
   }));
 };
 
-// ── PCA via NIPALS ────────────────────────────────────────
-// X: n×p matrix (n stocks, p months), already centered
-// Returns top nComponents score vectors + % variance explained
-const runPCA = (X, nComponents = 5) => {
-  const p = X[0].length;
-  const totalVar = X.reduce((s, row) => s + row.reduce((s2, v) => s2 + v * v, 0), 0);
-  let Xr = X.map(row => [...row]);
-  const eigenvalues = [], scoreVecs = [], loadingVecs = [];
-  for (let k = 0; k < nComponents; k++) {
-    let t = Xr.map(row => row[0]);
-    for (let iter = 0; iter < 300; iter++) {
-      const tSS = t.reduce((s, v) => s + v * v, 0);
-      if (tSS < 1e-14) break;
-      const load = Array(p).fill(0).map((_, j) => // eslint-disable-line no-loop-func
-        t.reduce((s, ti, i) => s + Xr[i][j] * ti, 0) / tSS
-      );
-      const loadNorm = Math.sqrt(load.reduce((s, v) => s + v * v, 0)) || 1;
-      const loadU = load.map(v => v / loadNorm);
-      const tNew = Xr.map(row => row.reduce((s, v, j) => s + v * loadU[j], 0)); // eslint-disable-line no-loop-func
-      const change = tNew.reduce((s, v, i) => s + (v - t[i]) ** 2, 0); // eslint-disable-line no-loop-func
-      t = tNew;
-      if (change < 1e-12) break;
-    }
-    const tSS = t.reduce((s, v) => s + v * v, 0);
-    if (tSS < 1e-14) break;
-    const load = Array(p).fill(0).map((_, j) => // eslint-disable-line no-loop-func
-      t.reduce((s, ti, i) => s + Xr[i][j] * ti, 0) / tSS
-    );
-    const loadNorm = Math.sqrt(load.reduce((s, v) => s + v * v, 0)) || 1;
-    const loadU = load.map(v => v / loadNorm);
-    eigenvalues.push(tSS);
-    scoreVecs.push(t);
-    loadingVecs.push(loadU);
-    Xr = Xr.map((row, i) => row.map((v, j) => v - t[i] * loadU[j]));
-  }
-  const explainedVar = eigenvalues.map(e =>
-    parseFloat((totalVar > 0 ? e / totalVar * 100 : 0).toFixed(1))
-  );
-  return { scoreVecs, loadingVecs, eigenvalues, explainedVar };
-};
-
 // ── Page: Correlation ──────────────────────────────────────
 const PageCorrelation = () => {
   const [ticker1, setTicker1] = useState('CBA.AX');
@@ -1733,7 +1693,7 @@ const CorrelCircle = ({ data }) => {
 const CAT_NAMES = Object.keys(CATEGORIES);
 
 const PagePCA = () => {
-  const [data, setData] = useState([]);
+  const [pcaResult, setPcaResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedCats, setSelectedCats] = useState(new Set(CAT_NAMES));
@@ -1748,67 +1708,18 @@ const PagePCA = () => {
     setSelectedCats(prev => prev.size === CAT_NAMES.length ? new Set() : new Set(CAT_NAMES));
 
   useEffect(() => {
-    fetchMonthlyReturns()
-      .then(setData)
-      .catch(() => setError('Failed to load data'))
+    fetchPCA()
+      .then(result => {
+        // Add colour per point from the frontend CATEGORIES mapping
+        const points = (result.points || []).map(p => ({
+          ...p,
+          color: tickerColor(p.ticker),
+        }));
+        setPcaResult({ ...result, points });
+      })
+      .catch(() => setError('Failed to load PCA data'))
       .finally(() => setLoading(false));
   }, []);
-
-  const pcaResult = React.useMemo(() => {
-    if (!data.length) return null;
-    const allMonths = [...new Set(data.map(d => d.month))].sort();
-    const last12 = allMonths.slice(-12);
-    const matrix = ASX_TICKERS.map(ticker =>
-      last12.map(month => {
-        const entry = data.find(d => d.ticker === ticker && d.month === month);
-        return entry ? parseFloat(entry.monthly_return) : 0;
-      })
-    );
-    // Center per column (month)
-    const colMeans = last12.map((_, j) =>
-      matrix.reduce((s, row) => s + row[j], 0) / matrix.length
-    );
-    const centered = matrix.map(row => row.map((v, j) => v - colMeans[j]));
-    const { scoreVecs, loadingVecs, eigenvalues, explainedVar } = runPCA(centered, 5);
-    const points = ASX_TICKERS.map((ticker, i) => ({
-      ticker,
-      x: parseFloat((scoreVecs[0]?.[i] ?? 0).toFixed(3)),
-      y: parseFloat((scoreVecs[1]?.[i] ?? 0).toFixed(3)),
-      color: tickerColor(ticker),
-    }));
-    const screeData = explainedVar.map((v, i) => ({
-      name: `PC${i + 1}`,
-      pct: v,
-      cumul: parseFloat(explainedVar.slice(0, i + 1).reduce((s, x) => s + x, 0).toFixed(1)),
-    }));
-    // Correlation circle: r_jk = loading_jk × sqrt(ev_k) / sqrt(colSS_j)
-    // Gives coordinates in [-1, 1] representing correlation of each month with PC axis
-    const colSS = last12.map((_, j) =>
-      centered.reduce((s, row) => s + row[j] * row[j], 0)
-    );
-    const fmtMonth = m => {
-      const [y, mo] = m.split('-');
-      return new Date(parseInt(y), parseInt(mo) - 1, 1)
-        .toLocaleDateString('en-AU', { month: 'short', year: '2-digit' });
-    };
-    const correlCircle = last12.map((month, j) => {
-      const ss = colSS[j] || 1;
-      const r1 = (loadingVecs[0]?.[j] ?? 0) * Math.sqrt(eigenvalues[0] ?? 0) / Math.sqrt(ss);
-      const r2 = (loadingVecs[1]?.[j] ?? 0) * Math.sqrt(eigenvalues[1] ?? 0) / Math.sqrt(ss);
-      return { label: fmtMonth(month), r1: parseFloat(r1.toFixed(3)), r2: parseFloat(r2.toFixed(3)) };
-    });
-    const fmtMonthLong = m => {
-      const [y, mo] = m.split('-');
-      return new Date(parseInt(y), parseInt(mo) - 1, 1)
-        .toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
-    };
-    return {
-      points, screeData, correlCircle, explainedVar,
-      range: `${fmtMonthLong(last12[0])} – ${fmtMonthLong(last12[last12.length - 1])}`,
-      pc1pct: explainedVar[0], pc2pct: explainedVar[1],
-      cumul2: parseFloat((explainedVar[0] + explainedVar[1]).toFixed(1)),
-    };
-  }, [data]);
 
   const PCATooltip = ({ active, payload }) => {
     if (!active || !payload?.length) return null;

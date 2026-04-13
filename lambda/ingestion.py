@@ -5,12 +5,25 @@ Triggered daily by EventBridge after ASX close (16:30 Sydney)
 - Subsequent runs: loads previous day only (incremental)
 """
 
-import json
-import os
 import io
+import json
 import logging
-import boto3
+import os
 from datetime import datetime
+
+import boto3
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
+import snowflake.connector
+import yfinance as yf
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+    load_pem_private_key,
+)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -42,12 +55,6 @@ def get_snowflake_connection(credentials):
     The private key is stored as a PEM string inside the Secrets Manager
     JSON payload, then converted to DER format as required by the connector.
     """
-    import snowflake.connector
-    from cryptography.hazmat.backends import default_backend
-    from cryptography.hazmat.primitives.serialization import (
-        load_pem_private_key, Encoding, PrivateFormat, NoEncryption
-    )
-
     pem_bytes = credentials['private_key'].encode('utf-8')
     private_key = load_pem_private_key(pem_bytes, password=None, backend=default_backend())
     private_key_der = private_key.private_bytes(
@@ -67,9 +74,6 @@ def get_snowflake_connection(credentials):
 
 def extract_data(period: str):
     """Extract ASX stock data via yfinance"""
-    import yfinance as yf
-    import pandas as pd
-
     logger.info(f"Extracting data for {len(ASX_STOCKS)} stocks, period={period}")
 
     all_data = []
@@ -116,9 +120,6 @@ def s3_key_for_date(date: datetime) -> str:
 
 def upload_to_s3(df, run_date: datetime):
     """Upload DataFrame as parquet to partitioned S3 path"""
-    import pyarrow as pa
-    import pyarrow.parquet as pq
-
     s3_key = s3_key_for_date(run_date)
 
     buffer = io.BytesIO()

@@ -83,4 +83,16 @@ export const fetchMonthlyReturns = async () => {
   }
 };
 
+export const fetchPCA = async () => {
+  try {
+    const response = await apiClient.get('/data/pca');
+    // The PCA endpoint returns Python-generated camelCase keys, not Snowflake
+    // uppercase columns, so no key normalisation is needed here.
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching PCA analysis:', error);
+    throw error;
+  }
+};
+
 export default apiClient;

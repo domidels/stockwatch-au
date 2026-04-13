@@ -4,10 +4,21 @@ Connects to Snowflake to fetch ASX analytics data
 """
 
 import json
-import os
 import logging
-import boto3
+import os
 from datetime import date, datetime
+
+import boto3
+import numpy as np
+import snowflake.connector
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+    load_pem_private_key,
+)
+from sklearn.decomposition import PCA
 
 # Configure logging
 logger = logging.getLogger()
@@ -39,12 +50,6 @@ def query_snowflake(query: str) -> list:
     Returns list of dictionaries
     """
     try:
-        import snowflake.connector
-        from cryptography.hazmat.backends import default_backend
-        from cryptography.hazmat.primitives.serialization import (
-            load_pem_private_key, Encoding, PrivateFormat, NoEncryption
-        )
-
         credentials = get_snowflake_connection()
 
         pem_bytes = credentials['private_key'].encode('utf-8')
@@ -63,21 +68,21 @@ def query_snowflake(query: str) -> list:
             schema=credentials['schema'],
             warehouse=credentials['warehouse']
         )
-        
+
         cursor = conn.cursor()
         cursor.execute(query)
-        
+
         # Get column names
         columns = [desc[0] for desc in cursor.description]
-        
+
         # Fetch all results and convert to list of dicts
         results = []
         for row in cursor.fetchall():
             results.append(dict(zip(columns, row)))
-        
+
         conn.close()
         return results
-        
+
     except Exception as e:
         logger.error(f"Snowflake query failed: {str(e)}")
         raise
@@ -217,6 +222,100 @@ def get_monthly_returns() -> dict:
     }
 
 
+def get_pca_analysis() -> dict:
+    """
+    Run PCA on the last 12 months of monthly returns across all tickers.
+
+    Returns:
+      - points: list of {ticker, x, y} scores on PC1/PC2
+      - correlCircle: list of {label, r1, r2} — month projections onto PC1/PC2
+      - screeData: list of {name, pct, cumul} — explained variance per component
+      - explainedVar: raw list of % per component
+      - range: human-readable date range string (e.g. "Apr 2025 – Mar 2026")
+      - pc1pct, pc2pct, cumul2: convenience floats for the UI
+    """
+    # Fetch last 12 months of monthly returns (same query as heatmap)
+    monthly = get_monthly_returns()['data']
+
+    all_months = sorted({row['MONTH'] for row in monthly})
+    last12 = all_months[-12:]
+
+    tickers = sorted({row['TICKER'] for row in monthly})
+
+    # Build return matrix: rows = tickers, cols = months
+    lookup = {(r['TICKER'], r['MONTH']): float(r['MONTHLY_RETURN']) for r in monthly}
+    matrix = np.array([
+        [lookup.get((t, m), 0.0) for m in last12]
+        for t in tickers
+    ], dtype=float)
+
+    # Column-centre (subtract per-month mean)
+    matrix -= matrix.mean(axis=0)
+
+    n_components = min(5, len(tickers), len(last12))
+    pca = PCA(n_components=n_components)
+    scores = pca.fit_transform(matrix)      # shape: (n_tickers, n_components)
+    loadings = pca.components_              # shape: (n_components, n_months)
+    explained = [round(float(v * 100), 1) for v in pca.explained_variance_ratio_]
+
+    points = [
+        {
+            'ticker': t,
+            'x': round(float(scores[i, 0]), 3),
+            'y': round(float(scores[i, 1]), 3),
+        }
+        for i, t in enumerate(tickers)
+    ]
+
+    # Correlation circle: correlation of each month variable with each PC axis
+    # r_jk = loading_k[j] * sqrt(eigenvalue_k) / sqrt(col_SS[j])
+    col_ss = (matrix ** 2).sum(axis=0)  # variance of each month column
+    eigenvalues = pca.explained_variance_  # actual eigenvalues (not ratios)
+
+    def fmt_month(m):
+        """'2025-04' → 'Apr 25'"""
+        y, mo = m.split('-')
+        return date(int(y), int(mo), 1).strftime('%b %y')
+
+    def fmt_month_long(m):
+        """'2025-04' → 'Apr 2025'"""
+        y, mo = m.split('-')
+        return date(int(y), int(mo), 1).strftime('%b %Y')
+
+    correl_circle = []
+    for j, month in enumerate(last12):
+        ss = float(col_ss[j]) or 1.0
+        r1 = float(loadings[0, j]) * float(eigenvalues[0]) ** 0.5 / ss ** 0.5
+        r2 = float(loadings[1, j]) * float(eigenvalues[1]) ** 0.5 / ss ** 0.5
+        correl_circle.append({
+            'label': fmt_month(month),
+            'r1': round(r1, 3),
+            'r2': round(r2, 3),
+        })
+
+    scree_data = []
+    cumul = 0.0
+    for i, pct in enumerate(explained):
+        cumul += pct
+        scree_data.append({
+            'name': f'PC{i + 1}',
+            'pct': pct,
+            'cumul': round(cumul, 1),
+        })
+
+    return {
+        'type': 'pca',
+        'points': points,
+        'correlCircle': correl_circle,
+        'screeData': scree_data,
+        'explainedVar': explained,
+        'range': f'{fmt_month_long(last12[0])} \u2013 {fmt_month_long(last12[-1])}',
+        'pc1pct': explained[0] if explained else 0,
+        'pc2pct': explained[1] if len(explained) > 1 else 0,
+        'cumul2': round((explained[0] if explained else 0) + (explained[1] if len(explained) > 1 else 0), 1),
+    }
+
+
 def get_market_summary() -> dict:
     """Get market summary statistics"""
     query = """
@@ -229,7 +328,7 @@ def get_market_summary() -> dict:
             ROUND(AVG(volume), 0) as avg_volume
         FROM asx_stock_data
     """
-    
+
     results = query_snowflake(query)
     return {
         'type': 'market_summary',
@@ -243,9 +342,9 @@ def lambda_handler(event, context):
     Main Lambda handler
     Routes requests based on method parameter
     """
-    
+
     logger.info(f"Received event: {json.dumps(event)}")
-    
+
     try:
         # Extract method from path
         method = event.get('pathParameters', {}).get('method', 'summary').lower()
@@ -261,6 +360,8 @@ def lambda_handler(event, context):
             result = get_market_summary()
         elif method == 'heatmap':
             result = get_monthly_returns()
+        elif method == 'pca':
+            result = get_pca_analysis()
         elif method == 'history':
             ticker = query_params.get('ticker', '').upper()
             if not ticker:
@@ -272,7 +373,7 @@ def lambda_handler(event, context):
                 'error': f'Unknown method: {method}',
                 'available_methods': ['summary', 'top_performers', 'volatility', 'history']
             }
-        
+
         def json_serial(obj):
             if isinstance(obj, (date, datetime)):
                 return obj.isoformat()
@@ -287,10 +388,10 @@ def lambda_handler(event, context):
             },
             'body': json.dumps(result, default=json_serial)
         }
-        
+
     except Exception as e:
         logger.error(f"Lambda error: {str(e)}", exc_info=True)
-        
+
         return {
             'statusCode': 500,
             'headers': {
