@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, LineChart, Line,
   BarChart, Bar, Cell,
-  ScatterChart, Scatter, ZAxis, ReferenceLine, ReferenceArea, Label
+  ScatterChart, Scatter, ZAxis, ReferenceLine, ReferenceArea, Label, Customized
 } from 'recharts';
 import {
   fetchMarketSummary,
@@ -396,11 +396,21 @@ const RiskReturnScatter = ({ data, volatility, allData, allVolatility, axisLimit
         </YAxis>
         <ZAxis range={[60, 60]} />
         <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
+        {/* SVG gradient definitions — each gradient originates from the chart-centre corner
+            of its quadrant (transparent) and darkens toward the outer corner. */}
+        <Customized component={() => (
+          <defs>
+            <linearGradient id="gradIdeal"      x1="1" y1="1" x2="0" y2="0"><stop offset="0%" stopColor="#009E73" stopOpacity="0"/><stop offset="100%" stopColor="#009E73" stopOpacity="0.18"/></linearGradient>
+            <linearGradient id="gradAggressive" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stopColor="#E69F00" stopOpacity="0"/><stop offset="100%" stopColor="#E69F00" stopOpacity="0.18"/></linearGradient>
+            <linearGradient id="gradTrap"       x1="1" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#CC79A7" stopOpacity="0"/><stop offset="100%" stopColor="#CC79A7" stopOpacity="0.18"/></linearGradient>
+            <linearGradient id="gradAvoid"      x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#D55E00" stopOpacity="0"/><stop offset="100%" stopColor="#D55E00" stopOpacity="0.18"/></linearGradient>
+          </defs>
+        )} />
         {/* Quadrant background shading — all 4 quadrants */}
-        <ReferenceArea x1={xDomain[0]} x2={avgVol} y1={avgRet} y2={yDomain[1]} fill="#009E73" fillOpacity={0.07} />
-        <ReferenceArea x1={avgVol} x2={xDomain[1]} y1={avgRet} y2={yDomain[1]} fill="#E69F00" fillOpacity={0.07} />
-        <ReferenceArea x1={xDomain[0]} x2={avgVol} y1={yDomain[0]} y2={avgRet} fill="#CC79A7" fillOpacity={0.07} />
-        <ReferenceArea x1={avgVol} x2={xDomain[1]} y1={yDomain[0]} y2={avgRet} fill="#D55E00" fillOpacity={0.07} />
+        <ReferenceArea x1={xDomain[0]} x2={avgVol} y1={avgRet} y2={yDomain[1]} fill="url(#gradIdeal)"      stroke="none" />
+        <ReferenceArea x1={avgVol} x2={xDomain[1]} y1={avgRet} y2={yDomain[1]} fill="url(#gradAggressive)" stroke="none" />
+        <ReferenceArea x1={xDomain[0]} x2={avgVol} y1={yDomain[0]} y2={avgRet} fill="url(#gradTrap)"       stroke="none" />
+        <ReferenceArea x1={avgVol} x2={xDomain[1]} y1={yDomain[0]} y2={avgRet} fill="url(#gradAvoid)"      stroke="none" />
 
         {/* Quadrant lines — based on all stocks, fixed regardless of category filter */}
         <ReferenceLine x={avgVol} stroke="#b0b0b0" strokeWidth={2} strokeDasharray="6 3" />
