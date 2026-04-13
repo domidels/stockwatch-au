@@ -320,23 +320,31 @@ const ScatterTooltip = ({ active, payload }) => {
     }}>
       <p style={{ fontWeight: 700, color: '#1e2a3a', marginBottom: 2 }}>{d.ticker}</p>
       {info && <p style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 8 }}>{info.company} · {info.sector}</p>}
-      <p style={{ color: GREEN, marginBottom: 2 }}>Return: <strong>{d.y > 0 ? '+' : ''}{d.y}%</strong></p>
+      <p style={{ color: GREEN, marginBottom: 2 }}>Annualised return: <strong>{d.y > 0 ? '+' : ''}{d.y}%</strong></p>
+      {d.rawReturn !== undefined && d.rawReturn !== d.y && (
+        <p style={{ color: '#8c8c8c', fontSize: 12, marginBottom: 2 }}>Period return: {d.rawReturn > 0 ? '+' : ''}{d.rawReturn}%</p>
+      )}
       <p style={{ color: ORANGE, marginBottom: info ? 8 : 0 }}>Volatility: <strong>{d.x}%</strong></p>
       {info && <p style={{ color: '#595959', fontSize: 12, lineHeight: 1.5, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>{info.description}</p>}
     </div>
   );
 };
 
-const RiskReturnScatter = ({ data, volatility, allData, allVolatility, axisLimits }) => {
+const RiskReturnScatter = ({ data, volatility, allData, allVolatility, axisLimits, days }) => {
   const volMap = {};
   volatility.forEach(v => { volMap[v.ticker] = v.volatility_std; });
+
+  // Annualise returns so all periods are comparable on the same scale.
+  // "All" period (days = null) is left as-is since the horizon is undefined.
+  const annFactor = days ? 365 / days : 1;
 
   const points = data
     .filter(d => volMap[d.ticker] != null)
     .map((d) => ({
       ticker: d.ticker,
       x: parseFloat(volMap[d.ticker]),
-      y: parseFloat(d.total_return_pct),
+      y: parseFloat((parseFloat(d.total_return_pct) * annFactor).toFixed(1)),
+      rawReturn: parseFloat(d.total_return_pct),
       color: tickerColor(d.ticker),
     }));
 
@@ -345,7 +353,10 @@ const RiskReturnScatter = ({ data, volatility, allData, allVolatility, axisLimit
   (allVolatility || volatility).forEach(v => { allVolMap[v.ticker] = v.volatility_std; });
   const allPoints = (allData || data)
     .filter(d => allVolMap[d.ticker] != null)
-    .map(d => ({ x: parseFloat(allVolMap[d.ticker]), y: parseFloat(d.total_return_pct) }));
+    .map(d => ({
+      x: parseFloat(allVolMap[d.ticker]),
+      y: parseFloat((parseFloat(d.total_return_pct) * annFactor).toFixed(1)),
+    }));
   const avgVol = allPoints.length ? allPoints.reduce((s, p) => s + p.x, 0) / allPoints.length : 0;
   const avgRet = allPoints.length ? allPoints.reduce((s, p) => s + p.y, 0) / allPoints.length : 0;
 
@@ -381,7 +392,7 @@ const RiskReturnScatter = ({ data, volatility, allData, allVolatility, axisLimit
           tick={{ fontSize: 11, fill: '#8c8c8c' }} axisLine={false} tickLine={false}
           tickFormatter={v => `${v}%`} domain={yDomain} allowDataOverflow={true}
         >
-          <Label value="Return (%)" angle={-90} position="insideLeft" style={{ fontSize: 11, fill: '#8c8c8c' }} />
+          <Label value="Annualised Return (%)" angle={-90} position="insideLeft" style={{ fontSize: 11, fill: '#8c8c8c' }} />
         </YAxis>
         <ZAxis range={[60, 60]} />
         <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
@@ -450,16 +461,19 @@ const PageOverview = ({ summary }) => {
   const topPerformers = cache[cacheKey]?.topPerformers || [];
   const volatility = cache[cacheKey]?.volatility || [];
 
-  // Compute fixed axis limits across ALL periods so scales don't jump
+  // Compute fixed axis limits across ALL periods so scales don't jump.
+  // Returns are annualised (× 365/days) so all periods share the same Y scale.
   const axisLimits = React.useMemo(() => {
     const allVol = [], allRet = [];
-    Object.values(cache).forEach(({ topPerformers: tp, volatility: vol }) => {
+    Object.entries(cache).forEach(([key, { topPerformers: tp, volatility: vol }]) => {
+      const periodDays = key === 'null' ? null : parseInt(key);
+      const annFactor = periodDays ? 365 / periodDays : 1;
       const volMap = {};
       vol.forEach(v => { volMap[v.ticker] = parseFloat(v.volatility_std); });
       tp.forEach(d => {
         if (volMap[d.ticker] != null) {
           allVol.push(volMap[d.ticker]);
-          allRet.push(parseFloat(d.total_return_pct));
+          allRet.push(parseFloat(d.total_return_pct) * annFactor);
         }
       });
     });
@@ -549,8 +563,8 @@ const PageOverview = ({ summary }) => {
       ) : (
         <>
           <div style={{ marginBottom: 28 }}>
-            <SectionCard title="Risk / Return — Volatility vs Total Return" icon={<IconZap />}
-              hint={"Each dot = one stock. X-axis = daily volatility (σ), Y-axis = total return.\nTop-left ↖ = low risk + high return (ideal). Bottom-right ↘ = high risk + low return (avoid).\nDashed lines split the chart at the portfolio average.\nDot colour = sector."}
+            <SectionCard title="Risk / Return — Volatility vs Annualised Return" icon={<IconZap />}
+              hint={"Each dot = one stock. X-axis = daily return volatility (σ), Y-axis = annualised return.\nAnnualising makes all periods comparable: a +2% monthly return becomes +24% annualised.\nTop-left ↖ = low risk + high return (ideal). Bottom-right ↘ = high risk + low return (avoid).\nDashed lines split the chart at the portfolio average. Dot colour = sector."}
             >
               {/* Category pills — colored */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -590,7 +604,14 @@ const PageOverview = ({ summary }) => {
                 allData={topPerformers}
                 allVolatility={volatility}
                 axisLimits={axisLimits}
+                days={days}
               />
+              <p style={{ fontSize: 12, color: '#8c8c8c', lineHeight: 1.7, marginTop: 16, borderTop: '1px solid #f5f5f5', paddingTop: 14 }}>
+                Returns are <strong style={{ color: '#1e2a3a' }}>annualised</strong> (scaled to a 12-month equivalent) so that all periods are directly comparable on the same axis.
+                A stock returning +2% over one month is plotted at +24% annualised — the same as a stock returning +24% over a full year.
+                The dashed lines mark the portfolio average volatility and average annualised return, dividing the chart into four quadrants.
+                {days === null && ' With "All" selected, the raw cumulative return is shown since the total period length varies per ticker.'}
+              </p>
             </SectionCard>
           </div>
 
