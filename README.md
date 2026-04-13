@@ -130,7 +130,7 @@ ASX_ANALYTICS
 - Snowflake account
 - Terraform >= 1.0
 - Docker
-- Node.js 20
+- Node.js 20 (required to build the React frontend)
 
 ### Initial Setup
 
@@ -285,7 +285,7 @@ aws cloudfront create-invalidation \
 | Data warehouse | Snowflake (ASX_ANALYTICS.FINANCE) |
 | Compute | AWS Lambda (Docker container images) |
 | API | AWS API Gateway |
-| Frontend | React, Recharts, Tailwind CSS |
+| Frontend | React 18, Recharts |
 | CDN | AWS CloudFront |
 | Infrastructure | Terraform |
 | Container registry | AWS ECR |
