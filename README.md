@@ -45,7 +45,7 @@ stockwatch-au/
 |
 |-- lambda/
 |   |-- ingestion.py              # Daily ingestion pipeline
-|   |-- handler.py                # API handler (4 endpoints)
+|   |-- handler.py                # API handler (6 endpoints)
 |   |-- Dockerfile.ingestion      # Container image for ingestion
 |   |-- Dockerfile.api            # Container image for API
 |   |-- requirements-ingestion.txt
@@ -118,7 +118,8 @@ ASX_ANALYTICS
 | GET /data/top_performers?days=N | Total return and volatility per ticker over N days |
 | GET /data/volatility?days=N | Daily return standard deviation per ticker over N days |
 | GET /data/history?ticker=CBA.AX&days=N | OHLCV price history for a given ticker |
-| GET /data/heatmap | Monthly returns per ticker (used by Heatmap and PCA pages) |
+| GET /data/heatmap | Monthly returns per ticker (used by Heatmap page) |
+| GET /data/pca | PCA on last 12 months of returns — scores, correlation circle, scree data (scikit-learn, computed server-side) |
 
 ---
 
