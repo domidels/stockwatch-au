@@ -154,3 +154,18 @@ resource "aws_api_gateway_stage" "api" {
 
   tags = var.tags
 }
+
+# =====================================================
+# API GATEWAY THROTTLING
+# =====================================================
+
+resource "aws_api_gateway_method_settings" "throttling" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  stage_name  = aws_api_gateway_stage.api.stage_name
+  method_path = "*/*"
+
+  settings {
+    throttling_rate_limit  = 10   # max sustained requests per second
+    throttling_burst_limit = 20   # max concurrent requests (absorbs page load spikes)
+  }
+}
