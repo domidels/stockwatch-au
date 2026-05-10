@@ -231,6 +231,7 @@ const Sidebar = ({ activePage, setActivePage, menuOpen, setMenuOpen }) => (
         <div>
           <p style={{ color: '#fff', fontWeight: 700, fontSize: 15, lineHeight: 1.2 }}>StockWatch</p>
           <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>AU Analytics</p>
+          <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: 10, marginTop: 2 }}>By D.Delseny</p>
         </div>
       </div>
     </div>
@@ -264,7 +265,6 @@ const Sidebar = ({ activePage, setActivePage, menuOpen, setMenuOpen }) => (
     <div style={{ padding: '16px 24px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
       <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11 }}>ASX · 20 stocks tracked</p>
       <p style={{ color: 'rgba(255,255,255,0.15)', fontSize: 10, marginTop: 2 }}>Data via Yahoo Finance</p>
-      <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: 10, marginTop: 8 }}>By D.Delseny</p>
     </div>
   </div>
 );
