@@ -12,6 +12,17 @@ output "s3_frontend_bucket_name" {
   value       = aws_s3_bucket.frontend_bucket.id
 }
 
+output "acm_validation_records" {
+  description = "CNAME records to add in Cloudflare to validate the ACM certificate"
+  value = {
+    for dvo in aws_acm_certificate.frontend.domain_validation_options : dvo.domain_name => {
+      name  = dvo.resource_record_name
+      type  = dvo.resource_record_type
+      value = dvo.resource_record_value
+    }
+  }
+}
+
 output "cloudfront_domain_name" {
   description = "CloudFront distribution domain"
   value       = var.cloudfront_enabled ? aws_cloudfront_distribution.frontend[0].domain_name : "Not enabled"

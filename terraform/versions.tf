@@ -34,3 +34,18 @@ provider "aws" {
     }
   }
 }
+
+# ACM certificates used by CloudFront must be created in us-east-1.
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+
+  default_tags {
+    tags = {
+      Project     = "stockwatch-au"
+      Environment = var.environment
+      ManagedBy   = "Terraform"
+      CostCenter  = "Portfolio"
+    }
+  }
+}
