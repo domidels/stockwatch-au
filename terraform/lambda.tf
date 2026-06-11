@@ -12,9 +12,8 @@ resource "aws_lambda_function" "api_handler" {
 
   environment {
     variables = {
-      SNOWFLAKE_SECRET_NAME = aws_secretsmanager_secret.snowflake_credentials.name
-      S3_BUCKET             = var.s3_bucket_name
-      ENVIRONMENT           = var.environment
+      S3_BUCKET   = var.s3_bucket_name
+      ENVIRONMENT = var.environment
     }
   }
 

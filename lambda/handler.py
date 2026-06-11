@@ -1,225 +1,133 @@
 """
 Lambda Function Handler for StockWatch AU
-Connects to Snowflake to fetch ASX analytics data
+Reads ASX Parquet data from S3 and computes analytics via pandas
 """
 
+import io
 import json
 import logging
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import boto3
 import numpy as np
-import snowflake.connector
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    NoEncryption,
-    PrivateFormat,
-    load_pem_private_key,
-)
+import pandas as pd
+import pyarrow.parquet as pq
 from sklearn.decomposition import PCA
 
-# Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# AWS Clients
-secrets_client = boto3.client('secretsmanager')
+s3_client = boto3.client('s3')
 
-# Environment variables
-SNOWFLAKE_SECRET_NAME = os.environ.get('SNOWFLAKE_SECRET_NAME')
 S3_BUCKET = os.environ.get('S3_BUCKET')
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
+S3_PREFIX = 'raw/asx/'
 
 
-def get_snowflake_connection():
-    """Get Snowflake connection credentials from Secrets Manager"""
-    try:
-        response = secrets_client.get_secret_value(SecretId=SNOWFLAKE_SECRET_NAME)
-        secret = json.loads(response['SecretString'])
-        return secret
-    except Exception as e:
-        logger.error(f"Failed to retrieve Snowflake credentials: {str(e)}")
-        raise
+def load_data_from_s3() -> pd.DataFrame:
+    """Load all ASX Parquet files from S3 into a single DataFrame"""
+    paginator = s3_client.get_paginator('list_objects_v2')
+    frames = []
+
+    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=S3_PREFIX):
+        for obj in page.get('Contents', []):
+            response = s3_client.get_object(Bucket=S3_BUCKET, Key=obj['Key'])
+            buffer = io.BytesIO(response['Body'].read())
+            frames.append(pd.read_parquet(buffer))
+
+    if not frames:
+        return pd.DataFrame(columns=['date', 'ticker', 'company_name', 'open', 'high', 'low', 'close', 'volume'])
+
+    df = pd.concat(frames, ignore_index=True)
+    df['date'] = df['date'].astype(str)
+    return df
 
 
-def query_snowflake(query: str) -> list:
-    """
-    Execute query against Snowflake
-    Returns list of dictionaries
-    """
-    try:
-        credentials = get_snowflake_connection()
-
-        pem_bytes = credentials['private_key'].encode('utf-8')
-        private_key = load_pem_private_key(pem_bytes, password=None, backend=default_backend())
-        private_key_der = private_key.private_bytes(
-            encoding=Encoding.DER,
-            format=PrivateFormat.PKCS8,
-            encryption_algorithm=NoEncryption()
-        )
-
-        conn = snowflake.connector.connect(
-            account=credentials['account'],
-            user=credentials['user'],
-            private_key=private_key_der,
-            database=credentials['database'],
-            schema=credentials['schema'],
-            warehouse=credentials['warehouse']
-        )
-
-        cursor = conn.cursor()
-        cursor.execute(query)
-
-        # Get column names
-        columns = [desc[0] for desc in cursor.description]
-
-        # Fetch all results and convert to list of dicts
-        results = []
-        for row in cursor.fetchall():
-            results.append(dict(zip(columns, row)))
-
-        conn.close()
-        return results
-
-    except Exception as e:
-        logger.error(f"Snowflake query failed: {str(e)}")
-        raise
+def apply_days_filter(df: pd.DataFrame, days: int) -> pd.DataFrame:
+    if not days:
+        return df
+    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime('%Y-%m-%d')
+    return df[df['date'] >= cutoff]
 
 
 def get_top_performers(days: int = None) -> dict:
-    """Get top performing stocks by total return over the period"""
-    date_filter = f"AND date >= DATEADD(day, -{days}, CURRENT_DATE())" if days else ""
-    query = f"""
-        WITH bounds AS (
-            SELECT
-                ticker,
-                MIN(date) as start_date,
-                MAX(date) as end_date
-            FROM asx_stock_data
-            WHERE 1=1 {date_filter}
-            GROUP BY ticker
-        ),
-        prices AS (
-            SELECT
-                s.ticker,
-                s.company_name,
-                FIRST_VALUE(s.close) OVER (PARTITION BY s.ticker ORDER BY s.date) as first_close,
-                LAST_VALUE(s.close)  OVER (PARTITION BY s.ticker ORDER BY s.date
-                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as last_close,
-                ROUND(STDDEV(s.close) OVER (PARTITION BY s.ticker), 2) as volatility,
-                COUNT(*) OVER (PARTITION BY s.ticker) as data_points
-            FROM asx_stock_data s
-            JOIN bounds b ON s.ticker = b.ticker
-                AND s.date BETWEEN b.start_date AND b.end_date
-        )
-        SELECT DISTINCT
-            ticker,
-            company_name,
-            ROUND(first_close, 2) as start_price,
-            ROUND(last_close, 2) as end_price,
-            ROUND((last_close - first_close) / first_close * 100, 2) as total_return_pct,
-            volatility,
-            data_points
-        FROM prices
-        WHERE data_points >= 20
-        ORDER BY ticker ASC
-    """
-    results = query_snowflake(query)
-    return {
-        'type': 'top_performers',
-        'data': results,
-        'count': len(results)
-    }
+    df = load_data_from_s3()
+    df = apply_days_filter(df, days)
+
+    results = []
+    for ticker, group in df.groupby('ticker'):
+        group = group.sort_values('date')
+        if len(group) < 20:
+            continue
+        first_close = float(group.iloc[0]['close'])
+        last_close = float(group.iloc[-1]['close'])
+        total_return = round((last_close - first_close) / first_close * 100, 2) if first_close else 0.0
+        results.append({
+            'TICKER': ticker,
+            'COMPANY_NAME': group.iloc[0]['company_name'],
+            'START_PRICE': round(first_close, 2),
+            'END_PRICE': round(last_close, 2),
+            'TOTAL_RETURN_PCT': total_return,
+            'VOLATILITY': round(float(group['close'].std()), 2),
+            'DATA_POINTS': len(group),
+        })
+
+    results.sort(key=lambda x: x['TICKER'])
+    return {'type': 'top_performers', 'data': results, 'count': len(results)}
 
 
 def get_volatility_analysis(days: int = None) -> dict:
-    """Get volatility analysis"""
-    date_filter = f"AND date >= DATEADD(day, -{days}, CURRENT_DATE())" if days else ""
-    query = f"""
-        WITH daily_returns AS (
-            SELECT
-                ticker,
-                (close - LAG(close) OVER (PARTITION BY ticker ORDER BY date))
-                / LAG(close) OVER (PARTITION BY ticker ORDER BY date) * 100 as daily_return_pct
-            FROM asx_stock_data
-            WHERE 1=1 {date_filter}
-        )
-        SELECT
-            ticker,
-            ROUND(STDDEV(daily_return_pct), 3) as volatility_std,
-            ROUND(AVG(ABS(daily_return_pct)), 3) as avg_daily_change,
-            ROUND(MIN(daily_return_pct), 2) as worst_day,
-            ROUND(MAX(daily_return_pct), 2) as best_day
-        FROM daily_returns
-        WHERE daily_return_pct IS NOT NULL
-        GROUP BY ticker
-        HAVING COUNT(*) >= 20
-        ORDER BY ticker ASC
-    """
-    results = query_snowflake(query)
-    return {
-        'type': 'volatility_analysis',
-        'data': results,
-        'count': len(results)
-    }
+    df = load_data_from_s3()
+    df = apply_days_filter(df, days)
+
+    results = []
+    for ticker, group in df.groupby('ticker'):
+        group = group.sort_values('date')
+        daily_returns = group['close'].pct_change() * 100
+        daily_returns = daily_returns.dropna()
+        if len(daily_returns) < 20:
+            continue
+        results.append({
+            'TICKER': ticker,
+            'VOLATILITY_STD': round(float(daily_returns.std()), 3),
+            'AVG_DAILY_CHANGE': round(float(daily_returns.abs().mean()), 3),
+            'WORST_DAY': round(float(daily_returns.min()), 2),
+            'BEST_DAY': round(float(daily_returns.max()), 2),
+        })
+
+    results.sort(key=lambda x: x['TICKER'])
+    return {'type': 'volatility_analysis', 'data': results, 'count': len(results)}
 
 
 def get_stock_history(ticker: str, days: int = None) -> dict:
-    """Get price history for a specific ticker"""
-    date_filter = f"AND date >= DATEADD(day, -{days}, CURRENT_DATE())" if days else ""
-    query = f"""
-        SELECT date, open, high, low, close, volume
-        FROM asx_stock_data
-        WHERE ticker = '{ticker}' {date_filter}
-        ORDER BY date
-    """
-    results = query_snowflake(query)
-    return {
-        'type': 'history',
-        'ticker': ticker,
-        'data': results
-    }
+    df = load_data_from_s3()
+    df = df[df['ticker'] == ticker]
+    df = apply_days_filter(df, days)
+    df = df.sort_values('date')
+
+    results = df[['date', 'open', 'high', 'low', 'close', 'volume']].to_dict('records')
+    return {'type': 'history', 'ticker': ticker, 'data': results}
 
 
 def get_monthly_returns() -> dict:
-    """Get monthly returns per ticker for heatmap"""
-    query = """
-        WITH monthly_bounds AS (
-            SELECT
-                ticker,
-                DATE_TRUNC('month', date) AS month,
-                MIN(date) AS first_day,
-                MAX(date) AS last_day
-            FROM asx_stock_data
-            GROUP BY ticker, DATE_TRUNC('month', date)
-        ),
-        monthly_prices AS (
-            SELECT
-                b.ticker,
-                b.month,
-                first_close.close AS open_price,
-                last_close.close  AS close_price
-            FROM monthly_bounds b
-            JOIN asx_stock_data first_close
-                ON first_close.ticker = b.ticker AND first_close.date = b.first_day
-            JOIN asx_stock_data last_close
-                ON last_close.ticker = b.ticker AND last_close.date = b.last_day
-        )
-        SELECT
-            ticker,
-            TO_CHAR(month, 'YYYY-MM') AS month,
-            ROUND((close_price - open_price) / NULLIF(open_price, 0) * 100, 2) AS monthly_return
-        FROM monthly_prices
-        ORDER BY ticker, month
-    """
-    results = query_snowflake(query)
-    return {
-        'type': 'monthly_returns',
-        'data': results,
-        'count': len(results)
-    }
+    df = load_data_from_s3()
+    df['_month'] = pd.to_datetime(df['date']).dt.to_period('M')
+
+    results = []
+    for (ticker, month), group in df.groupby(['ticker', '_month']):
+        group = group.sort_values('date')
+        open_price = float(group.iloc[0]['close'])
+        close_price = float(group.iloc[-1]['close'])
+        monthly_return = round((close_price - open_price) / open_price * 100, 2) if open_price else 0.0
+        results.append({
+            'TICKER': ticker,
+            'MONTH': str(month),
+            'MONTHLY_RETURN': monthly_return,
+        })
+
+    results.sort(key=lambda x: (x['TICKER'], x['MONTH']))
+    return {'type': 'monthly_returns', 'data': results, 'count': len(results)}
 
 
 def get_pca_analysis() -> dict:
@@ -234,7 +142,6 @@ def get_pca_analysis() -> dict:
       - range: human-readable date range string (e.g. "Apr 2025 – Mar 2026")
       - pc1pct, pc2pct, cumul2: convenience floats for the UI
     """
-    # Fetch last 12 months of monthly returns (same query as heatmap)
     monthly = get_monthly_returns()['data']
 
     all_months = sorted({row['MONTH'] for row in monthly})
@@ -242,20 +149,18 @@ def get_pca_analysis() -> dict:
 
     tickers = sorted({row['TICKER'] for row in monthly})
 
-    # Build return matrix: rows = tickers, cols = months
     lookup = {(r['TICKER'], r['MONTH']): float(r['MONTHLY_RETURN']) for r in monthly}
     matrix = np.array([
         [lookup.get((t, m), 0.0) for m in last12]
         for t in tickers
     ], dtype=float)
 
-    # Column-centre (subtract per-month mean)
     matrix -= matrix.mean(axis=0)
 
     n_components = min(5, len(tickers), len(last12))
     pca = PCA(n_components=n_components)
-    scores = pca.fit_transform(matrix)      # shape: (n_tickers, n_components)
-    loadings = pca.components_              # shape: (n_components, n_months)
+    scores = pca.fit_transform(matrix)
+    loadings = pca.components_
     explained = [round(float(v * 100), 1) for v in pca.explained_variance_ratio_]
     # singular_values_**2 = S_k² = sum of squares of score vectors
     # This matches the NIPALS eigenvalue definition used in the correlation circle formula.
@@ -263,25 +168,17 @@ def get_pca_analysis() -> dict:
     eigenvalues = pca.singular_values_ ** 2
 
     points = [
-        {
-            'ticker': t,
-            'x': round(float(scores[i, 0]), 3),
-            'y': round(float(scores[i, 1]), 3),
-        }
+        {'ticker': t, 'x': round(float(scores[i, 0]), 3), 'y': round(float(scores[i, 1]), 3)}
         for i, t in enumerate(tickers)
     ]
 
-    # Correlation circle: correlation of each month variable with each PC axis
-    # r_jk = loading_k[j] * sqrt(eigenvalue_k) / sqrt(col_SS[j])
-    col_ss = (matrix ** 2).sum(axis=0)  # variance of each month column
+    col_ss = (matrix ** 2).sum(axis=0)
 
     def fmt_month(m):
-        """'2025-04' → 'Apr 25'"""
         y, mo = m.split('-')
         return date(int(y), int(mo), 1).strftime('%b %y')
 
     def fmt_month_long(m):
-        """'2025-04' → 'Apr 2025'"""
         y, mo = m.split('-')
         return date(int(y), int(mo), 1).strftime('%b %Y')
 
@@ -290,21 +187,13 @@ def get_pca_analysis() -> dict:
         ss = float(col_ss[j]) or 1.0
         r1 = float(loadings[0, j]) * float(eigenvalues[0]) ** 0.5 / ss ** 0.5
         r2 = float(loadings[1, j]) * float(eigenvalues[1]) ** 0.5 / ss ** 0.5
-        correl_circle.append({
-            'label': fmt_month(month),
-            'r1': round(r1, 3),
-            'r2': round(r2, 3),
-        })
+        correl_circle.append({'label': fmt_month(month), 'r1': round(r1, 3), 'r2': round(r2, 3)})
 
     scree_data = []
     cumul = 0.0
     for i, pct in enumerate(explained):
         cumul += pct
-        scree_data.append({
-            'name': f'PC{i + 1}',
-            'pct': pct,
-            'cumul': round(cumul, 1),
-        })
+        scree_data.append({'name': f'PC{i + 1}', 'pct': pct, 'cumul': round(cumul, 1)})
 
     return {
         'type': 'pca',
@@ -312,49 +201,42 @@ def get_pca_analysis() -> dict:
         'correlCircle': correl_circle,
         'screeData': scree_data,
         'explainedVar': explained,
-        'range': f'{fmt_month_long(last12[0])} \u2013 {fmt_month_long(last12[-1])}',
+        'range': f'{fmt_month_long(last12[0])} – {fmt_month_long(last12[-1])}',
         'pc1pct': explained[0] if explained else 0,
         'pc2pct': explained[1] if len(explained) > 1 else 0,
-        'cumul2': round((explained[0] if explained else 0) + (explained[1] if len(explained) > 1 else 0), 1),
+        'cumul2': round(
+            (explained[0] if explained else 0) + (explained[1] if len(explained) > 1 else 0), 1
+        ),
     }
 
 
 def get_market_summary() -> dict:
-    """Get market summary statistics"""
-    query = """
-        SELECT
-            COUNT(DISTINCT ticker) as unique_stocks,
-            COUNT(*) as total_records,
-            MIN(date) as earliest_date,
-            MAX(date) as latest_date,
-            ROUND(AVG(close), 2) as avg_price,
-            ROUND(AVG(volume), 0) as avg_volume
-        FROM asx_stock_data
-    """
+    df = load_data_from_s3()
+    if df.empty:
+        return {'type': 'market_summary', 'data': {}}
 
-    results = query_snowflake(query)
     return {
         'type': 'market_summary',
-        'data': results[0] if results else {}
+        'data': {
+            'UNIQUE_STOCKS': int(df['ticker'].nunique()),
+            'TOTAL_RECORDS': len(df),
+            'EARLIEST_DATE': df['date'].min(),
+            'LATEST_DATE': df['date'].max(),
+            'AVG_PRICE': round(float(df['close'].mean()), 2),
+            'AVG_VOLUME': round(float(df['volume'].mean()), 0),
+        }
     }
 
 
-
 def lambda_handler(event, context):
-    """
-    Main Lambda handler
-    Routes requests based on method parameter
-    """
-
+    """Main Lambda handler — routes requests based on {method} path parameter"""
     logger.info(f"Received event: {json.dumps(event)}")
 
     try:
-        # Extract method from path
         method = event.get('pathParameters', {}).get('method', 'summary').lower()
         query_params = event.get('queryStringParameters') or {}
         days = int(query_params['days']) if query_params.get('days', '').isdigit() else None
 
-        # Route to appropriate handler
         if method == 'top_performers':
             result = get_top_performers(days=days)
         elif method == 'volatility':
@@ -374,7 +256,7 @@ def lambda_handler(event, context):
         else:
             result = {
                 'error': f'Unknown method: {method}',
-                'available_methods': ['summary', 'top_performers', 'volatility', 'history']
+                'available_methods': ['summary', 'top_performers', 'volatility', 'history', 'heatmap', 'pca']
             }
 
         def json_serial(obj):
@@ -394,15 +276,11 @@ def lambda_handler(event, context):
 
     except Exception as e:
         logger.error(f"Lambda error: {str(e)}", exc_info=True)
-
         return {
             'statusCode': 500,
             'headers': {
                 'Access-Control-Allow-Origin': '*',
                 'Content-Type': 'application/json'
             },
-            'body': json.dumps({
-                'error': str(e),
-                'environment': ENVIRONMENT
-            })
+            'body': json.dumps({'error': str(e), 'environment': ENVIRONMENT})
         }

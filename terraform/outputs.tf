@@ -51,39 +51,34 @@ output "setup_instructions" {
   description = "Instructions for credentials setup"
   sensitive   = true
   value       = <<-EOT
-    
+
     ✅ TERRAFORM DEPLOYMENT COMPLETE!
-    
-    🔐 NEXT STEPS - Add credentials:
-    
-    1. Set S3 credentials for Snowflake:
-       aws secretsmanager create-secret \
-         --name stockwatch-au-s3-credentials \
-         --secret-string '{"access_key":"YOUR_KEY","secret_key":"YOUR_SECRET"}'
-    
-    2. Configure local AWS credentials for your scripts:
+
+    🔐 NEXT STEPS:
+
+    1. Configure local AWS credentials for your scripts:
        aws configure
-       
+
        AWS Access Key ID: ${aws_iam_access_key.script_user.id}
        AWS Secret Access Key: ${aws_iam_access_key.script_user.secret}
-       
-    3. Update frontend with API endpoint:
+
+    2. Update frontend with API endpoint:
        Frontend API URL: ${aws_api_gateway_stage.api.invoke_url}
-    
-    4. Deploy frontend to S3:
+
+    3. Deploy frontend to S3:
        aws s3 sync frontend/build s3://${aws_s3_bucket.frontend_bucket.id} --delete
-    
-    5. Invalidate CloudFront (after frontend update):
+
+    4. Invalidate CloudFront (after frontend update):
        aws cloudfront create-invalidation \
          --distribution-id ${var.cloudfront_enabled ? aws_cloudfront_distribution.frontend[0].id : "NOT_ENABLED"} \
          --paths "/*"
-    
+
     🎯 Architecture is ready!
     📊 Data Flow:
-       Your scripts → S3 (via IAM user)
-       Lambda → Snowflake (via Secrets Manager)
-       Frontend → Lambda API (via CloudFront)
-    
+       Ingestion Lambda → S3 Parquet (daily, Hive-partitioned)
+       API Lambda → S3 Parquet → pandas analytics → JSON
+       Frontend → API Gateway → Lambda (via CloudFront)
+
     💰 Cost Monitoring:
        CloudWatch Logs: Lambda execution
        S3: Lifecycle policies for cost optimization
@@ -103,7 +98,3 @@ output "script_user_secret_key" {
   sensitive   = true
 }
 
-output "snowflake_secret_name" {
-  description = "Secrets Manager secret name for Snowflake credentials"
-  value       = aws_secretsmanager_secret.snowflake_credentials.name
-}

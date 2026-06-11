@@ -28,43 +28,6 @@ variable "s3_bucket_name" {
   # Must be provided in terraform.tfvars
 }
 
-# Snowflake Configuration (stored in Secrets Manager)
-variable "snowflake_account" {
-  description = "Snowflake account identifier"
-  type        = string
-  sensitive   = true
-}
-
-variable "snowflake_user" {
-  description = "Snowflake username"
-  type        = string
-  sensitive   = true
-}
-
-variable "snowflake_private_key" {
-  description = "Snowflake RSA private key (PEM content, no passphrase)"
-  type        = string
-  sensitive   = true
-}
-
-variable "snowflake_database" {
-  description = "Snowflake database name"
-  type        = string
-  default     = "ASX_ANALYTICS"
-}
-
-variable "snowflake_schema" {
-  description = "Snowflake schema name"
-  type        = string
-  default     = "PUBLIC"
-}
-
-variable "snowflake_warehouse" {
-  description = "Snowflake warehouse name"
-  type        = string
-  default     = "COMPUTE_WH"
-}
-
 # Lambda Configuration
 variable "lambda_timeout" {
   description = "Lambda function timeout in seconds"

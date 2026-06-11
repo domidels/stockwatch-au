@@ -1,12 +1,11 @@
 # ASX StockWatch Configuration
-# Cost-optimized settings for Australian stock market analytics
 
 # =====================================================
-# AWS S3 Configuration (Cost Optimized)
+# AWS S3 Configuration
 # =====================================================
 
-# S3 Bucket Settings
-AWS_REGION=ap-southeast-2  # Sydney region for AU data
+AWS_REGION=ap-southeast-2
+S3_BUCKET=your-asx-data-bucket-name
 S3_BUCKET_NAME=your-asx-data-bucket-name
 S3_STORAGE_CLASS=STANDARD_IA  # 46% cheaper than STANDARD
 
@@ -16,58 +15,34 @@ S3_STORAGE_CLASS=STANDARD_IA  # 46% cheaper than STANDARD
 # After 365 days: DEEP_ARCHIVE
 
 # =====================================================
-# Snowflake Configuration
-# =====================================================
-
-# Connection Details
-SNOWFLAKE_ACCOUNT=your-account.snowflakecomputing.com
-SNOWFLAKE_USER=your-username
-SNOWFLAKE_PASSWORD=your-password
-SNOWFLAKE_WAREHOUSE=COMPUTE_WH
-SNOWFLAKE_DATABASE=ASX_ANALYTICS
-SNOWFLAKE_SCHEMA=PUBLIC
-
-# Warehouse Settings (Cost Optimized)
-WAREHOUSE_SIZE=XSMALL  # Minimal size for demo
-AUTO_SUSPEND=60        # Suspend after 1 minute of inactivity
-AUTO_RESUME=TRUE       # Auto-resume when needed
-
-# =====================================================
 # Data Pipeline Settings
 # =====================================================
 
-# ASX Data Settings
-ASX_STOCKS_TOP_N=20    # Limit to top 20 stocks for cost control
-DATA_PERIOD_MONTHS=6   # 6 months of historical data
-EXTRACTION_FREQUENCY=daily  # How often to extract new data
+ASX_STOCKS_TOP_N=20
+DATA_PERIOD_MONTHS=6
+EXTRACTION_FREQUENCY=daily
 
-# File Format Settings (Cost Optimized)
-COMPRESSION_FORMAT=snappy  # Fast compression, good ratio
-FILE_FORMAT=parquet       # Columnar format for analytics
+COMPRESSION_FORMAT=snappy
+FILE_FORMAT=parquet
 
 # =====================================================
 # Cost Monitoring
 # =====================================================
 
-# Budget Limits (Monthly)
-S3_MAX_COST=2.00       # $2/month S3 budget
-SNOWFLAKE_MAX_COST=3.00 # $3/month Snowflake budget
-TOTAL_MAX_COST=5.00    # $5/month total budget
+S3_MAX_COST=2.00
+TOTAL_MAX_COST=2.00
 
-# Monitoring Settings
-COST_ALERT_THRESHOLD=0.80  # Alert at 80% of budget
+COST_ALERT_THRESHOLD=0.80
 USAGE_REPORT_FREQUENCY=weekly
 
 # =====================================================
 # Local Development Settings
 # =====================================================
 
-# Data Directories
 DATA_DIR=data/
 LOGS_DIR=logs/
 TEMP_DIR=temp/
 
-# Logging
 LOG_LEVEL=INFO
 LOG_FORMAT=%(asctime)s - %(levelname)s - %(message)s
 
@@ -79,30 +54,12 @@ LOG_FORMAT=%(asctime)s - %(levelname)s - %(message)s
 # AWS_ACCESS_KEY_ID=your-key
 # AWS_SECRET_ACCESS_KEY=your-secret
 
-# Snowflake Credentials (use key-pair auth in production)
-# SNOWFLAKE_PRIVATE_KEY_PATH=path/to/private/key
-
-# =====================================================
-# Performance Tuning
-# =====================================================
-
-# Query Optimization
-QUERY_TIMEOUT_SECONDS=300  # 5 minutes
-RESULT_CACHE_ENABLED=TRUE
-AUTO_CLUSTERING_ENABLED=TRUE
-
-# Data Loading
-BATCH_SIZE=1000
-PARALLEL_WORKERS=4
-
 # =====================================================
 # Dashboard Settings
 # =====================================================
 
-# Dashboard Refresh
 DASHBOARD_AUTO_REFRESH_MINUTES=60
 CACHE_TTL_HOURS=24
 
-# Visualization
 DEFAULT_CHART_TYPE=line
-COLOR_SCHEME=au_flag  # Australian flag colors
+COLOR_SCHEME=au_flag

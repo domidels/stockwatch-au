@@ -67,10 +67,6 @@ temp/
 # AWS
 .aws/
 
-# Snowflake
-snowflake-key.p8
-snowflake-key.pub
-
 # Cost reports
 cost-reports/
 *.xlsx

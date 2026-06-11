@@ -12,10 +12,8 @@ resource "aws_lambda_function" "ingestion" {
 
   environment {
     variables = {
-      S3_BUCKET             = var.s3_bucket_name
-      SNOWFLAKE_SECRET_NAME = aws_secretsmanager_secret.snowflake_credentials.name
-      S3_SECRET_NAME        = aws_secretsmanager_secret.s3_credentials.name
-      ENVIRONMENT           = var.environment
+      S3_BUCKET   = var.s3_bucket_name
+      ENVIRONMENT = var.environment
     }
   }
 
