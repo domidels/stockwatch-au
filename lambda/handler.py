@@ -12,7 +12,6 @@ from datetime import date, datetime, timedelta
 import boto3
 import numpy as np
 import pandas as pd
-import pyarrow.parquet as pq
 from sklearn.decomposition import PCA
 
 logger = logging.getLogger()
