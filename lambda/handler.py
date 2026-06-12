@@ -3,7 +3,6 @@ Lambda Function Handler for StockWatch AU
 Reads ASX Parquet data from S3 and computes analytics via pandas
 """
 
-import concurrent.futures
 import io
 import json
 import logging
@@ -23,7 +22,7 @@ s3_client = boto3.client('s3')
 
 S3_BUCKET = os.environ.get('S3_BUCKET')
 ENVIRONMENT = os.environ.get('ENVIRONMENT', 'dev')
-S3_PREFIX = 'raw/asx/'
+CONSOLIDATED_KEY = 'raw/asx/consolidated/asx_all.parquet'
 
 # Module-level cache — reused across warm Lambda invocations
 _cache_df: pd.DataFrame | None = None
@@ -31,40 +30,25 @@ _cache_ts: float = 0.0
 CACHE_TTL = 300  # 5 minutes
 
 
-def _fetch_parquet(key: str) -> pd.DataFrame:
-    response = s3_client.get_object(Bucket=S3_BUCKET, Key=key)
-    return pd.read_parquet(io.BytesIO(response['Body'].read()))
-
-
 def load_data_from_s3() -> pd.DataFrame:
-    """Load all ASX Parquet files from S3, with in-memory cache and parallel reads."""
+    """Read the single consolidated Parquet file from S3, with in-memory cache."""
     global _cache_df, _cache_ts
 
     if _cache_df is not None and (time.time() - _cache_ts) < CACHE_TTL:
-        logger.info("Cache hit — skipping S3 reads")
+        logger.info("Cache hit")
         return _cache_df
 
-    paginator = s3_client.get_paginator('list_objects_v2')
-    keys = [
-        obj['Key']
-        for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=S3_PREFIX)
-        for obj in page.get('Contents', [])
-    ]
-
-    if not keys:
+    try:
+        response = s3_client.get_object(Bucket=S3_BUCKET, Key=CONSOLIDATED_KEY)
+        df = pd.read_parquet(io.BytesIO(response['Body'].read()))
+        df['date'] = df['date'].astype(str)
+        _cache_df = df
+        _cache_ts = time.time()
+        logger.info(f"Loaded {len(df)} rows from consolidated file")
+        return df
+    except s3_client.exceptions.NoSuchKey:
+        logger.warning("Consolidated file not found — returning empty DataFrame")
         return pd.DataFrame(columns=['date', 'ticker', 'company_name', 'open', 'high', 'low', 'close', 'volume'])
-
-    logger.info(f"Loading {len(keys)} Parquet files in parallel")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-        frames = list(executor.map(_fetch_parquet, keys))
-
-    df = pd.concat(frames, ignore_index=True)
-    df['date'] = df['date'].astype(str)
-
-    _cache_df = df
-    _cache_ts = time.time()
-    logger.info(f"Loaded {len(df)} rows, cache refreshed")
-    return df
 
 
 def apply_days_filter(df: pd.DataFrame, days: int) -> pd.DataFrame:

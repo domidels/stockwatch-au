@@ -24,7 +24,7 @@ if not S3_BUCKET:
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lambda'))
 os.environ['S3_BUCKET'] = S3_BUCKET
 
-from ingestion import extract_data, upload_to_s3
+from ingestion import extract_data, upload_to_s3, update_consolidated
 
 
 if __name__ == '__main__':
@@ -35,5 +35,8 @@ if __name__ == '__main__':
     for date_str, group in df.groupby('date'):
         date = datetime.strptime(date_str, '%Y-%m-%d')
         upload_to_s3(group, date)
+
+    logger.info("Writing consolidated file...")
+    update_consolidated(df)
 
     logger.info("Backfill complete.")

@@ -23,6 +23,7 @@ logger.setLevel(logging.INFO)
 s3_client = boto3.client('s3')
 
 S3_BUCKET = os.environ.get('S3_BUCKET')
+CONSOLIDATED_KEY = 'raw/asx/consolidated/asx_all.parquet'
 
 ASX_STOCKS = [
     'CBA.AX', 'BHP.AX', 'CSL.AX', 'MQG.AX', 'WBC.AX',
@@ -99,6 +100,31 @@ def upload_to_s3(df, run_date: datetime):
     return s3_key
 
 
+def update_consolidated(new_df: pd.DataFrame):
+    """Merge new rows into the single consolidated Parquet file the API handler reads."""
+    try:
+        response = s3_client.get_object(Bucket=S3_BUCKET, Key=CONSOLIDATED_KEY)
+        existing = pd.read_parquet(io.BytesIO(response['Body'].read()))
+        combined = pd.concat([existing, new_df], ignore_index=True)
+        combined = combined.drop_duplicates(subset=['date', 'ticker'], keep='last')
+    except Exception:
+        combined = new_df.copy()
+
+    combined = combined.sort_values(['date', 'ticker'])
+    buffer = io.BytesIO()
+    table = pa.Table.from_pandas(combined, preserve_index=False)
+    pq.write_table(table, buffer, compression='snappy')
+    buffer.seek(0)
+
+    s3_client.put_object(
+        Bucket=S3_BUCKET,
+        Key=CONSOLIDATED_KEY,
+        Body=buffer.getvalue(),
+        ContentType='application/octet-stream'
+    )
+    logger.info(f"Consolidated file updated: {len(combined)} total rows")
+
+
 def s3_has_data() -> bool:
     """Check whether any Parquet data already exists in S3."""
     response = s3_client.list_objects_v2(Bucket=S3_BUCKET, Prefix='raw/asx/', MaxKeys=1)
@@ -143,6 +169,8 @@ def lambda_handler(event, context):
         else:
             s3_key = upload_to_s3(df, run_date)
             result_key = s3_key
+
+        update_consolidated(df)
 
         return {
             'statusCode': 200,
