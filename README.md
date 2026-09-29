@@ -11,13 +11,14 @@ EventBridge (daily, 4:30 PM Sydney, Mon-Fri)
       |
 Lambda Ingestion
   |-- yfinance API  -->  DataFrame (in memory)
-  |-- DataFrame     -->  S3 (Parquet, partitioned by date)
-  |-- S3            -->  Snowflake (MERGE via external stage)
+  |-- DataFrame     -->  S3 daily partitions (Parquet, Hive layout)
+  |-- DataFrame     -->  S3 consolidated file (merged + de-duplicated)
       |
 Lambda API (triggered by API Gateway)
-  |-- Snowflake queries  -->  JSON response
+  |-- S3 consolidated Parquet  -->  pandas / scikit-learn  -->  JSON response
+  |-- In-memory cache (5 min TTL, reused across warm invocations)
       |
-React Dashboard (CloudFront + S3)
+React Dashboard (CloudFront + S3, custom domain via ACM)
   |-- Market Overview      (aggregated stats, top performers, volatility)
   |-- Stock Explorer       (price history, monthly/weekly bar chart)
   |-- Monthly Heatmap      (month-by-month returns across all tickers)
@@ -25,6 +26,7 @@ React Dashboard (CloudFront + S3)
   |-- Stock Clusters (PCA) (dimensionality reduction of 12-month return profiles)
 ```
 
+> **Why no data warehouse?** The project originally loaded data into Snowflake. With ~20 tickers of daily OHLCV data, the full history fits in a single Parquet file of a few MB, so Snowflake was replaced by S3 + pandas: lower cost, fewer credentials to manage, and a simpler deployment.
 
 ---
 
@@ -38,14 +40,15 @@ stockwatch-au/
 |   |-- outputs.tf                # Output values
 |   |-- iam.tf                    # IAM roles, users, policies
 |   |-- s3.tf                     # S3 buckets + CloudFront
-|   |-- lambda.tf                 # API Lambda + API Gateway
+|   |-- acm.tf                    # ACM certificate for the custom domain (us-east-1)
+|   |-- lambda.tf                 # API Lambda + API Gateway (+ throttling)
 |   |-- ingestion.tf              # Ingestion Lambda + EventBridge
 |   |-- ecr.tf                    # ECR repositories
-|   |-- terraform.tfvars.example  # Configuration template
+|   |-- terraform.tfvars          # Configuration (not committed)
 |
 |-- lambda/
 |   |-- ingestion.py              # Daily ingestion pipeline
-|   |-- handler.py                # API handler (6 endpoints)
+|   |-- handler.py                # API handler (6 endpoints, pandas + scikit-learn)
 |   |-- Dockerfile.ingestion      # Container image for ingestion
 |   |-- Dockerfile.api            # Container image for API
 |   |-- requirements-ingestion.txt
@@ -66,16 +69,16 @@ stockwatch-au/
 |-- scripts/
 |   |-- build_lambda.sh           # Build and deploy Lambda Docker images
 |   |-- deploy_frontend.sh        # Build and deploy React frontend to S3 + CloudFront
+|   |-- backfill_local.py         # One-off backfill of full history to S3 (run locally)
 |   |-- extract_asx_data.py       # Local data extraction (dev only)
 |   |-- upload_to_s3.py           # Local S3 upload (dev only)
-|   |-- snowflake_loader.py       # Local Snowflake loader (dev only)
 |
-|-- snowflake/
-|   |-- schemas/asx_schema.sql
-|   |-- queries/asx_analytics.sql
+|-- snowflake/                    # Legacy SQL from the Snowflake version (no longer used)
+|
+|-- docs/                         # Setup and Terraform deployment guides
 |
 |-- .github/
-|   |-- workflows/deploy.yml      # CI/CD pipeline
+|   |-- workflows/deploy.yml      # CI/CD pipeline (lint + deploy)
 |
 |-- .env                          # Local environment variables (not committed)
 |-- requirements.txt
@@ -85,29 +88,38 @@ stockwatch-au/
 
 ## Data Flow
 
-### S3 Partitioning (Hive format, Athena-compatible)
+### S3 Layout
 
 ```
 s3://stockwatch-au-data-.../
   raw/
     asx/
-      year=2026/
+      year=2026/                  # Daily partitions (Hive format, Athena-compatible)
         month=03/
           day=31/
             asx_data.parquet
+      consolidated/
+        asx_all.parquet           # Full history in one file — read by the API
 ```
 
-One file per trading day. Initial load creates ~130 files (6 months of history). Each subsequent daily run adds one file (~20 rows, ~2 KB).
+- **Daily partitions**: one file per trading day (~20 rows, ~2 KB). Kept as the raw, append-only record.
+- **Consolidated file**: every ingestion run merges new rows into `asx_all.parquet` (de-duplicated on `date` + `ticker`). The API reads this single file (~200 ms) instead of hundreds of partitions, which keeps responses well under the API Gateway 29 s timeout.
 
-### Snowflake Schema
+### Ingestion modes
+
+| Situation | Period fetched | Output |
+|-----------|----------------|--------|
+| S3 empty (first run) | 6 months | One partition per trading day + consolidated file |
+| Daily run (EventBridge) | Last 2 days | One partition for the run date + consolidated merge |
+| Forced (`{"period": "3y"}` in the event) | As requested | One partition per trading day + consolidated merge |
+| Local backfill (`scripts/backfill_local.py`) | Max available | Missing partitions only; consolidated file created if absent |
+
+### Data schema
 
 ```
-ASX_ANALYTICS
-  FINANCE
-    asx_stock_data
-      date, ticker, company_name
-      open, high, low, close, volume
-      dividends, stock_splits, loaded_at
+date, ticker, company_name,
+open, high, low, close, volume,
+dividends, stock_splits
 ```
 
 ### API Endpoints
@@ -128,7 +140,6 @@ ASX_ANALYTICS
 ### Prerequisites
 
 - AWS account with CLI configured
-- Snowflake account
 - Terraform >= 1.0
 - Docker
 - Node.js 20 (required to build the React frontend)
@@ -137,25 +148,17 @@ ASX_ANALYTICS
 
 **1. Configure Terraform**
 
-```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# Fill in: snowflake_account, snowflake_user, snowflake_private_key
+Create `terraform/terraform.tfvars`:
+
+```hcl
+s3_bucket_name = "your-data-bucket-name"
+domain_name    = "your-domain.com"
+environment    = "dev"
+lambda_timeout = 300
+lambda_memory  = 256
 ```
 
-**2. Generate Snowflake RSA key pair**
-
-```bash
-openssl genrsa -out snowflake-key.p8 2048
-openssl rsa -in snowflake-key.p8 -pubout -out snowflake-key.pub
-```
-
-Register the public key in Snowflake:
-```sql
-ALTER USER your_user SET RSA_PUBLIC_KEY='<contents of snowflake-key.pub without BEGIN/END lines>';
-```
-
-**3. Deploy infrastructure**
+**2. Deploy infrastructure**
 
 ```bash
 # Create ECR repositories first
@@ -171,13 +174,19 @@ cd terraform
 terraform apply
 ```
 
-**4. Store S3 credentials for Snowflake**
+**3. Validate the custom domain certificate**
 
-Terraform automatically stores the dedicated `snowflake-s3-reader` IAM user credentials in Secrets Manager. No manual step required.
+`terraform apply` blocks on ACM DNS validation. In another terminal:
 
-**5. Run initial data load**
+```bash
+terraform output acm_validation_records
+```
 
-The ingestion Lambda auto-detects an empty table and loads 6 months of history on first run:
+Add each CNAME record in Cloudflare (DNS > Records). Validation usually completes within 5 minutes, then point the domain at `terraform output cloudfront_domain_name`.
+
+**4. Run initial data load**
+
+The ingestion Lambda auto-detects an empty bucket and loads 6 months of history on first run:
 
 ```bash
 aws lambda invoke \
@@ -185,14 +194,26 @@ aws lambda invoke \
   /tmp/result.json && cat /tmp/result.json
 ```
 
-Subsequent daily runs are triggered automatically by EventBridge.
-
-**6. Deploy frontend**
+To load the full available history instead, run the local backfill (requires `S3_BUCKET` in `.env`, uses your AWS CLI credentials):
 
 ```bash
-cd frontend
-cp .env.local.example .env.local
-# Set REACT_APP_API_URL to terraform output api_gateway_endpoint
+python scripts/backfill_local.py
+```
+
+Subsequent daily runs are triggered automatically by EventBridge.
+
+**5. Deploy frontend**
+
+Set in `.env`:
+
+```bash
+FRONTEND_S3_BUCKET=<terraform output s3_frontend_bucket_name>
+CLOUDFRONT_DISTRIBUTION_ID=<terraform output cloudfront_distribution_id>
+```
+
+Then build with `REACT_APP_API_URL` set to `terraform output api_gateway_endpoint`:
+
+```bash
 ./scripts/deploy_frontend.sh
 ```
 
@@ -216,47 +237,40 @@ After modifying any file in `frontend/src/`:
 
 ### CI/CD (GitHub Actions)
 
-Every push to `main` automatically:
-1. Builds and pushes Docker images to ECR
-2. Updates Lambda functions
-3. Builds and deploys the React frontend to S3
-4. Invalidates CloudFront cache
+Every push to `main` (or manual `workflow_dispatch`) automatically:
+1. Lints Python (`ruff check lambda/`) and builds the React app
+2. Builds and pushes Docker images to ECR
+3. Updates Lambda functions
+4. Builds and deploys the React frontend to S3
+5. Invalidates CloudFront cache
 
 Required GitHub secrets (Settings > Secrets and variables > Actions):
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `API_GATEWAY_URL`
-- `FRONTEND_BUCKET`
+- `FRONTEND_S3_BUCKET`
 - `CLOUDFRONT_DISTRIBUTION_ID`
 
 ---
 
 ## Security
 
-- Lambda authenticates to Snowflake via RSA key pair (no password)
-- Snowflake credentials stored in AWS Secrets Manager
-- Dedicated IAM user for Snowflake S3 access (read-only, scoped to `raw/asx/*`)
-- S3 buckets are private, frontend served via CloudFront with OAI
+- Lambdas use an IAM role (no stored credentials); ingestion can only write under `raw/*`
+- S3 buckets are private, frontend served via CloudFront with OAI over HTTPS (ACM certificate)
+- API Gateway throttling: 10 req/s sustained, 20 burst (bots additionally filtered by Cloudflare)
 - No credentials committed to git (`terraform.tfvars`, `.env`, `*.tfstate` in `.gitignore`)
 
 ---
 
 ## Troubleshooting
 
-**Lambda ingestion fails (Snowflake auth)**
-```bash
-aws secretsmanager get-secret-value \
-  --secret-id stockwatch-au-snowflake-credentials \
-  --query SecretString --output text
-```
-Verify that `private_key` contains the full PEM including `-----BEGIN/END RSA PRIVATE KEY-----`.
+**Dashboard shows no data**
 
-**Lambda ingestion fails (S3 access)**
+Check that the consolidated file exists:
 ```bash
-aws secretsmanager get-secret-value \
-  --secret-id stockwatch-au-s3-credentials \
-  --query SecretString --output text
+aws s3 ls s3://<data-bucket>/raw/asx/consolidated/
 ```
+If it is missing, run `python scripts/backfill_local.py` or invoke the ingestion Lambda. Note the API caches data for 5 minutes per warm Lambda instance.
 
 **View Lambda logs**
 ```bash
@@ -293,12 +307,12 @@ Full license: https://creativecommons.org/licenses/by-nc/4.0/
 |-------|-----------|
 | Data source | yfinance (Yahoo Finance / ASX) |
 | Storage | AWS S3 (Parquet + Snappy compression) |
-| Data warehouse | Snowflake (ASX_ANALYTICS.FINANCE) |
+| Analytics | pandas, NumPy, scikit-learn (PCA) |
 | Compute | AWS Lambda (Docker container images) |
 | API | AWS API Gateway |
 | Frontend | React 18, Recharts |
-| CDN | AWS CloudFront |
+| CDN | AWS CloudFront + ACM (custom domain, DNS on Cloudflare) |
 | Infrastructure | Terraform |
 | Container registry | AWS ECR |
 | CI/CD | GitHub Actions |
-| Auth | RSA key pair (Snowflake), IAM roles (AWS) |
+| Auth | IAM roles (AWS) |
