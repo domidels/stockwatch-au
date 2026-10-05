@@ -2,3 +2,5 @@ yfinance>=0.2.40
 numpy==1.26.4
 pyarrow==14.0.2
 pandas>=2.1.0
+scipy==1.11.4
+scikit-learn==1.5.2

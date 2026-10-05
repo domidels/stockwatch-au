@@ -20,6 +20,26 @@ resource "aws_s3_bucket_public_access_block" "data_bucket" {
   restrict_public_buckets = true
 }
 
+# CloudFront may read the pre-computed dashboard JSON (api/*) — nothing else
+resource "aws_s3_bucket_policy" "data_bucket" {
+  bucket = aws_s3_bucket.data_bucket.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowCloudFrontOAIApiPrefix"
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_cloudfront_origin_access_identity.frontend_oai.iam_arn
+        }
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.data_bucket.arn}/api/*"
+      }
+    ]
+  })
+}
+
 
 # =====================================================
 # S3 BUCKET FOR FRONTEND (CloudFront origin)
@@ -81,6 +101,16 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
+  # Pre-computed dashboard JSON written by the ingestion Lambda (s3://<data>/api/*)
+  origin {
+    domain_name = aws_s3_bucket.data_bucket.bucket_regional_domain_name
+    origin_id   = "S3Data"
+
+    s3_origin_config {
+      origin_access_identity = aws_cloudfront_origin_access_identity.frontend_oai.cloudfront_access_identity_path
+    }
+  }
+
   enabled             = true
   is_ipv6_enabled     = true
   default_root_object = "index.html"
@@ -90,6 +120,7 @@ resource "aws_cloudfront_distribution" "frontend" {
     allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods   = ["GET", "HEAD"]
     target_origin_id = "S3Frontend"
+    compress         = true
 
     forwarded_values {
       query_string = false
@@ -110,6 +141,7 @@ resource "aws_cloudfront_distribution" "frontend" {
     cached_methods   = ["GET", "HEAD"]
     path_pattern     = "/*.js"
     target_origin_id = "S3Frontend"
+    compress         = true
 
     forwarded_values {
       query_string = false
@@ -123,6 +155,31 @@ resource "aws_cloudfront_distribution" "frontend" {
     min_ttl                = 0
     default_ttl            = 86400
     max_ttl                = 31536000
+  }
+
+  # TTL follows the Cache-Control header set by the ingestion Lambda (15 min)
+  ordered_cache_behavior {
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods   = ["GET", "HEAD"]
+    path_pattern     = "/api/*"
+    target_origin_id = "S3Data"
+    compress         = true
+
+    # AWS managed "SimpleCORS" policy — lets `npm start` on localhost read the JSON
+    response_headers_policy_id = "60669652-455b-4ae9-85a4-c4c02393f86c"
+
+    forwarded_values {
+      query_string = false
+
+      cookies {
+        forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+    min_ttl                = 0
+    default_ttl            = 900
+    max_ttl                = 3600
   }
 
   restrictions {

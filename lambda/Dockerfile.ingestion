@@ -3,6 +3,6 @@ FROM public.ecr.aws/lambda/python:3.11
 COPY requirements-ingestion.txt .
 RUN pip install --no-cache-dir -r requirements-ingestion.txt
 
-COPY ingestion.py ${LAMBDA_TASK_ROOT}/
+COPY ingestion.py analytics.py ${LAMBDA_TASK_ROOT}/
 
 CMD ["ingestion.lambda_handler"]

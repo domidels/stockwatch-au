@@ -26,7 +26,9 @@ if not S3_BUCKET:
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lambda'))
 os.environ['S3_BUCKET'] = S3_BUCKET
 
-from ingestion import extract_data, upload_to_s3, update_consolidated, s3_key_for_date, CONSOLIDATED_KEY
+from ingestion import (
+    extract_data, upload_to_s3, update_consolidated, publish_static_api, s3_key_for_date, CONSOLIDATED_KEY,
+)
 
 import boto3
 s3_client = boto3.client('s3')
@@ -61,7 +63,7 @@ if __name__ == '__main__':
         logger.info("Consolidated file already exists — skipping")
     else:
         logger.info("Creating consolidated file...")
-        update_consolidated(df)
-        logger.info("Consolidated file created.")
+        publish_static_api(update_consolidated(df))
+        logger.info("Consolidated file and static API created.")
 
     logger.info("Backfill complete.")

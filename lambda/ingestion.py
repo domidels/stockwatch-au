@@ -16,6 +16,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import yfinance as yf
+from analytics import build_static_payloads
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -24,6 +25,9 @@ s3_client = boto3.client('s3')
 
 S3_BUCKET = os.environ.get('S3_BUCKET')
 CONSOLIDATED_KEY = 'raw/asx/consolidated/asx_all.parquet'
+API_PREFIX = 'api/'
+# Served by CloudFront — data changes once a day, a short TTL is enough
+API_CACHE_CONTROL = 'public, max-age=900'
 
 ASX_STOCKS = [
     'CBA.AX', 'BHP.AX', 'CSL.AX', 'MQG.AX', 'WBC.AX',
@@ -100,8 +104,8 @@ def upload_to_s3(df, run_date: datetime):
     return s3_key
 
 
-def update_consolidated(new_df: pd.DataFrame):
-    """Merge new rows into the single consolidated Parquet file the API handler reads."""
+def update_consolidated(new_df: pd.DataFrame) -> pd.DataFrame:
+    """Merge new rows into the single consolidated Parquet file and return the full history."""
     try:
         response = s3_client.get_object(Bucket=S3_BUCKET, Key=CONSOLIDATED_KEY)
         existing = pd.read_parquet(io.BytesIO(response['Body'].read()))
@@ -123,6 +127,21 @@ def update_consolidated(new_df: pd.DataFrame):
         ContentType='application/octet-stream'
     )
     logger.info(f"Consolidated file updated: {len(combined)} total rows")
+    return combined
+
+
+def publish_static_api(df: pd.DataFrame):
+    """Write the pre-computed dashboard JSON files to s3://<bucket>/api/."""
+    payloads = build_static_payloads(df)
+    for path, payload in payloads.items():
+        s3_client.put_object(
+            Bucket=S3_BUCKET,
+            Key=API_PREFIX + path,
+            Body=json.dumps(payload, separators=(',', ':')).encode('utf-8'),
+            ContentType='application/json',
+            CacheControl=API_CACHE_CONTROL,
+        )
+    logger.info(f"Published {len(payloads)} static JSON files to s3://{S3_BUCKET}/{API_PREFIX}")
 
 
 def s3_has_data() -> bool:
@@ -139,10 +158,17 @@ def lambda_handler(event, context):
     On subsequent runs it fetches only the previous trading day (incremental).
     A specific period can be forced by passing {"period": "3y"} in the event
     payload, which is useful for one-off backfills.
+    Passing {"rebuild_api": true} only regenerates the static JSON files from
+    the existing consolidated file (no yfinance call).
     """
     run_date = datetime.utcnow()
 
     try:
+        if event.get('rebuild_api'):
+            response = s3_client.get_object(Bucket=S3_BUCKET, Key=CONSOLIDATED_KEY)
+            publish_static_api(pd.read_parquet(io.BytesIO(response['Body'].read())))
+            return {'statusCode': 200, 'body': json.dumps({'status': 'api rebuilt'})}
+
         forced_period = event.get('period')
         if forced_period:
             period = forced_period
@@ -170,7 +196,8 @@ def lambda_handler(event, context):
             s3_key = upload_to_s3(df, run_date)
             result_key = s3_key
 
-        update_consolidated(df)
+        combined = update_consolidated(df)
+        publish_static_api(combined)
 
         return {
             'statusCode': 200,

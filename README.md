@@ -13,8 +13,11 @@ Lambda Ingestion
   |-- yfinance API  -->  DataFrame (in memory)
   |-- DataFrame     -->  S3 daily partitions (Parquet, Hive layout)
   |-- DataFrame     -->  S3 consolidated file (merged + de-duplicated)
+  |-- Full history  -->  S3 api/*.json (every dashboard payload, pre-computed)
       |
-Lambda API (triggered by API Gateway)
+CloudFront /api/*  -->  static JSON (gzip, edge-cached) — what the dashboard reads
+      |
+Lambda API (triggered by API Gateway, ad-hoc queries only)
   |-- S3 consolidated Parquet  -->  pandas / scikit-learn  -->  JSON response
   |-- In-memory cache (5 min TTL, reused across warm invocations)
       |
@@ -100,7 +103,15 @@ s3://stockwatch-au-data-.../
             asx_data.parquet
       consolidated/
         asx_all.parquet           # Full history in one file — read by the API
+  api/                            # Pre-computed dashboard JSON, served by CloudFront at /api/
+    summary.json
+    overview.json                 # Top performers + volatility for every period (1M … All)
+    heatmap.json
+    pca.json
+    history/<TICKER>.json         # Full price history, filtered by period in the browser
 ```
+
+- **Static API**: after each run the ingestion Lambda regenerates `api/*.json` (`lambda/analytics.py`, shared with the API handler). The dashboard loads these files from CloudFront, so a page load never waits on a Lambda cold start. To rebuild them without fetching new data: `python scripts/build_static_api.py`, or invoke the ingestion Lambda with `{"rebuild_api": true}`.
 
 - **Daily partitions**: one file per trading day (~20 rows, ~2 KB). Kept as the raw, append-only record.
 - **Consolidated file**: every ingestion run merges new rows into `asx_all.parquet` (de-duplicated on `date` + `ticker`). The API reads this single file (~200 ms) instead of hundreds of partitions, which keeps responses well under the API Gateway 29 s timeout.
