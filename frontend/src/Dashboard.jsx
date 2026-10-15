@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './Dashboard.css';
 import {
   XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, LineChart, Line,
+  Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area,
   BarChart, Bar, Cell,
   ScatterChart, Scatter, ZAxis, ReferenceLine, ReferenceArea, Label, Customized
 } from 'recharts';
@@ -859,6 +859,14 @@ const PageExplorer = ({ ticker, setTicker }) => {
     : null;
   const isPositive = priceChange > 0;
 
+  // yfinance-style fill: first close of the window is the reference.
+  // Gradients are sized to the area's bounding box (min → max close), so the
+  // colour switch sits exactly at the reference price.
+  const baseClose = oldest.close ?? null;
+  const baseOffset = maxClose !== null && maxClose > minClose
+    ? (maxClose - baseClose) / (maxClose - minClose)
+    : 0;
+
   const tickFormatter = (dateStr) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
@@ -957,7 +965,7 @@ const PageExplorer = ({ ticker, setTicker }) => {
         {/* Line chart */}
         <div style={{ marginBottom: 28 }}>
           <SectionCard title={`Closing Price — ${ticker} (${periodLabel})`} icon={<IconSearch />}
-            hint={"Daily closing price over the selected period.\nHover the chart for the exact price on any date.\n% change in the stat cards = (last − first close) / first close × 100.\nGaps may appear on non-trading days (weekends, public holidays)."}
+            hint={"Daily closing price over the selected period.\nDashed line = first close of the period: green above it, red below.\nHover the chart for the exact price on any date.\n% change in the stat cards = (last − first close) / first close × 100.\nGaps may appear on non-trading days (weekends, public holidays)."}
           >
             {loading ? (
               <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -967,7 +975,19 @@ const PageExplorer = ({ ticker, setTicker }) => {
               <p style={{ color: RED, textAlign: 'center', padding: 40 }}>{error}</p>
             ) : (
               <ResponsiveContainer width="100%" height={340}>
-                <LineChart data={priceHistory}>
+                <AreaChart data={priceHistory}>
+                  <defs>
+                    <linearGradient id="explorerStroke" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset={baseOffset} stopColor={GREEN} />
+                      <stop offset={baseOffset} stopColor={RED} />
+                    </linearGradient>
+                    <linearGradient id="explorerFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset={0} stopColor={GREEN} stopOpacity={0.28} />
+                      <stop offset={baseOffset} stopColor={GREEN} stopOpacity={0.06} />
+                      <stop offset={baseOffset} stopColor={RED} stopOpacity={0.06} />
+                      <stop offset={1} stopColor={RED} stopOpacity={0.28} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" vertical={false} />
                   <XAxis
                     dataKey="date"
@@ -983,12 +1003,21 @@ const PageExplorer = ({ ticker, setTicker }) => {
                     domain={['auto', 'auto']}
                   />
                   <Tooltip content={<CustomTooltip />} />
-                  <Line
+                  {baseClose !== null && (
+                    <ReferenceLine y={baseClose} stroke="#8c8c8c" strokeDasharray="4 4" />
+                  )}
+                  <Area
                     type="monotone" dataKey="close" name="Close"
-                    stroke={BLUE} strokeWidth={2} dot={false}
-                    activeDot={{ r: 5, fill: BLUE }}
+                    baseValue={baseClose ?? 'dataMin'}
+                    stroke="url(#explorerStroke)" strokeWidth={2}
+                    fill="url(#explorerFill)" fillOpacity={1}
+                    dot={false} isAnimationActive={false}
+                    activeDot={({ cx, cy, payload }) => (
+                      <circle cx={cx} cy={cy} r={5} stroke="#fff" strokeWidth={2}
+                        fill={payload.close >= baseClose ? GREEN : RED} />
+                    )}
                   />
-                </LineChart>
+                </AreaChart>
               </ResponsiveContainer>
             )}
           </SectionCard>
