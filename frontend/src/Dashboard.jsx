@@ -90,6 +90,10 @@ const RED = '#D55E00';
 const RED_LIGHT = '#fae8e0';
 const SIDEBAR_BG = '#1e2a3a';
 
+// Price chart (Explorer): market-style up/down colours
+const PRICE_UP = '#089981';
+const PRICE_DOWN = '#F23645';
+
 // Okabe-Ito colorblind-safe palette
 const CATEGORIES = {
   Banking:          { tickers: ['CBA.AX','WBC.AX','NAB.AX','ANZ.AX','MQG.AX'], color: '#0072B2' },
@@ -978,14 +982,14 @@ const PageExplorer = ({ ticker, setTicker }) => {
                 <AreaChart data={priceHistory}>
                   <defs>
                     <linearGradient id="explorerStroke" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset={baseOffset} stopColor={GREEN} />
-                      <stop offset={baseOffset} stopColor={RED} />
+                      <stop offset={baseOffset} stopColor={PRICE_UP} />
+                      <stop offset={baseOffset} stopColor={PRICE_DOWN} />
                     </linearGradient>
                     <linearGradient id="explorerFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset={0} stopColor={GREEN} stopOpacity={0.28} />
-                      <stop offset={baseOffset} stopColor={GREEN} stopOpacity={0.06} />
-                      <stop offset={baseOffset} stopColor={RED} stopOpacity={0.06} />
-                      <stop offset={1} stopColor={RED} stopOpacity={0.28} />
+                      <stop offset={0} stopColor={PRICE_UP} stopOpacity={0.22} />
+                      <stop offset={baseOffset} stopColor={PRICE_UP} stopOpacity={0.02} />
+                      <stop offset={baseOffset} stopColor={PRICE_DOWN} stopOpacity={0.02} />
+                      <stop offset={1} stopColor={PRICE_DOWN} stopOpacity={0.22} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" vertical={false} />
@@ -1004,17 +1008,17 @@ const PageExplorer = ({ ticker, setTicker }) => {
                   />
                   <Tooltip content={<CustomTooltip />} />
                   {baseClose !== null && (
-                    <ReferenceLine y={baseClose} stroke="#8c8c8c" strokeDasharray="4 4" />
+                    <ReferenceLine y={baseClose} stroke="#b0b0b0" strokeWidth={1} strokeDasharray="3 3" />
                   )}
                   <Area
                     type="monotone" dataKey="close" name="Close"
                     baseValue={baseClose ?? 'dataMin'}
-                    stroke="url(#explorerStroke)" strokeWidth={2}
+                    stroke="url(#explorerStroke)" strokeWidth={1.75}
                     fill="url(#explorerFill)" fillOpacity={1}
                     dot={false} isAnimationActive={false}
                     activeDot={({ cx, cy, payload }) => (
                       <circle cx={cx} cy={cy} r={5} stroke="#fff" strokeWidth={2}
-                        fill={payload.close >= baseClose ? GREEN : RED} />
+                        fill={payload.close >= baseClose ? PRICE_UP : PRICE_DOWN} />
                     )}
                   />
                 </AreaChart>
