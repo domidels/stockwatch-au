@@ -140,19 +140,19 @@ const PERIOD_LABELS = {
 
 // ── Reusable components ────────────────────────────────────
 const StatCard = ({ label, value, icon, color, bg }) => (
-  <div style={{
+  <div className="stat-card" style={{
     background: '#fff', borderRadius: 12, padding: '24px',
     boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
     display: 'flex', alignItems: 'center', gap: 16,
     border: '1px solid #f0f0f0'
   }}>
-    <div style={{
+    <div className="stat-icon" style={{
       width: 52, height: 52, borderRadius: 12, background: bg, color,
       display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
     }}>{icon}</div>
     <div>
-      <p style={{ fontSize: 14, color: '#8c8c8c', fontWeight: 500, marginBottom: 4 }}>{label}</p>
-      <p style={{ fontSize: 20, fontWeight: 700, color: '#1e2a3a', lineHeight: 1 }}>{value}</p>
+      <p className="stat-label" style={{ fontSize: 14, color: '#8c8c8c', fontWeight: 500, marginBottom: 4 }}>{label}</p>
+      <p className="stat-value" style={{ fontSize: 20, fontWeight: 700, color: '#1e2a3a', lineHeight: 1 }}>{value}</p>
     </div>
   </div>
 );
@@ -286,7 +286,7 @@ const PERIODS_EXTENDED = [
 ];
 
 const PeriodFilter = ({ selected, onChange, periods = PERIODS }) => (
-  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+  <div className="period-filter" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
     {periods.map(p => (
       <button key={p.label} onClick={() => onChange(p.days)} style={{
         padding: '5px 12px', borderRadius: 6, border: '1px solid',
@@ -520,7 +520,7 @@ const PageOverview = ({ summary }) => {
 
   return (
   <>
-    <div style={{
+    <div className="page-header" style={{
       background: '#fff', padding: '16px 32px',
       borderBottom: '1px solid #f0f0f0',
       boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
@@ -532,17 +532,17 @@ const PageOverview = ({ summary }) => {
       </p>
     </div>
 
-    <div style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
-      {/* Period filter — above stat cards, same style as Stock Explorer */}
-      <div style={{
+    <div className="page-body" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
+      {/* Period filter — above stat cards, same style as Stock Explorer (sticky on mobile) */}
+      <div className="control-bar" style={{
         display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24,
         background: '#fff', borderRadius: 12, padding: '18px 24px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.07)', border: `1.5px solid ${BLUE_LIGHT}`
       }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Period</span>
-        <div style={{ width: 1, height: 20, background: '#e8e8e8' }} />
+        <span className="control-label" style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Period</span>
+        <div className="control-sep" style={{ width: 1, height: 20, background: '#e8e8e8' }} />
         <PeriodFilter selected={days} onChange={setDays} periods={PERIODS_EXTENDED} />
-        <span style={{ fontSize: 12, color: '#8c8c8c', marginLeft: 4 }}>
+        <span className="control-hint" style={{ fontSize: 12, color: '#8c8c8c', marginLeft: 4 }}>
           {days ? `Last ${PERIODS_EXTENDED.find(p => p.days === days)?.label}` : 'All available data'}
         </span>
       </div>
@@ -555,7 +555,7 @@ const PageOverview = ({ summary }) => {
         const mostStable = [...volatility].sort((a, b) => a.volatility_std - b.volatility_std)[0];
         const avgPos = avgReturn >= 0;
         return (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, marginBottom: 28 }}>
+          <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, marginBottom: 28 }}>
             <StatCard
               label="Best Performer"
               value={`${best.ticker.replace('.AX','')} ${best.total_return_pct > 0 ? '+' : ''}${best.total_return_pct}%`}
@@ -643,7 +643,7 @@ const PageOverview = ({ summary }) => {
             </SectionCard>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 0 }}>
+          <div className="two-col-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 0 }}>
             <SectionCard title="Total Return % — Ranked Best to Worst" icon={<IconBarChart />}
               hint={"Return = (last close − first close) / first close × 100.\nRanked from best to worst over the selected period.\nGreen = positive return, red = negative.\nThe period selector above applies to all rows."}
             >
@@ -722,11 +722,11 @@ const StockSelector = ({ label, value, onChange, color }) => {
   const selectedCat = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(value));
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div className="stock-selector" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
       <span style={{ fontSize: 12, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</span>
 
       {/* Trigger button */}
-      <div onClick={() => setOpen(o => !o)} style={{
+      <div className="stock-selector-btn" onClick={() => setOpen(o => !o)} style={{
         position: 'relative', padding: '9px 14px', borderRadius: 8,
         border: `2px solid ${color}`, fontSize: 14, fontWeight: 700,
         color: '#1e2a3a', cursor: 'pointer', background: '#fff',
@@ -776,7 +776,7 @@ const StockSelector = ({ label, value, onChange, color }) => {
 
       {/* Company name + category next to trigger */}
       {selectedInfo && (
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="stock-selector-info" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, color: '#8c8c8c' }}>{selectedInfo.company}</span>
           {selectedCat && (
             <span style={{
@@ -928,7 +928,7 @@ const PageExplorer = ({ ticker, setTicker }) => {
 
   return (
     <>
-      <div style={{
+      <div className="page-header" style={{
         background: '#fff', padding: '16px 32px',
         borderBottom: '1px solid #f0f0f0',
         boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
@@ -937,24 +937,24 @@ const PageExplorer = ({ ticker, setTicker }) => {
         <p style={{ fontSize: 13, color: '#8c8c8c', marginTop: 2 }}>Closing price history · Updated daily after ASX close (4:30 PM Sydney)</p>
       </div>
 
-      <div style={{ padding: '28px 32px 32px', maxWidth: 1400, margin: '0 auto' }}>
-        {/* Ticker + Period selector */}
-        <div style={{
+      <div className="page-body" style={{ padding: '28px 32px 32px', maxWidth: 1400, margin: '0 auto' }}>
+        {/* Ticker + Period selector (sticky on mobile) */}
+        <div className="control-bar" style={{
           display: 'flex', alignItems: 'center', gap: 24, marginBottom: 28,
           flexWrap: 'wrap', background: '#fff', borderRadius: 12,
           padding: '18px 24px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
           border: `1.5px solid ${BLUE_LIGHT}`
         }}>
           <StockSelector label="Stock" value={ticker} onChange={setTicker} color={BLUE} />
-          <div style={{ width: 1, height: 32, background: '#e8e8e8' }} />
+          <div className="control-sep" style={{ width: 1, height: 32, background: '#e8e8e8' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Period</span>
+            <span className="control-label" style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Period</span>
             <PeriodFilter selected={explorerDays} onChange={setExplorerDays} periods={PERIODS_EXTENDED} />
           </div>
         </div>
 
         {/* Mini stat cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginBottom: 28 }}>
+        <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginBottom: 28 }}>
           <StatCard label="Latest Close" value={latest.close ? `$${latest.close.toFixed(2)}` : '—'} icon={<IconDollar />} color={BLUE} bg={BLUE_LIGHT} />
           <StatCard
             label={`${periodLabel} Change`}
@@ -1128,7 +1128,7 @@ const PageStockInfo = () => {
 
   return (
     <>
-      <div style={{
+      <div className="page-header" style={{
         background: '#fff', padding: '16px 32px',
         borderBottom: '1px solid #f0f0f0',
         boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
@@ -1137,7 +1137,7 @@ const PageStockInfo = () => {
         <p style={{ fontSize: 13, color: '#8c8c8c', marginTop: 2 }}>Overview of the 20 ASX stocks tracked</p>
       </div>
 
-      <div style={{ padding: 32, maxWidth: 1280, margin: '0 auto' }}>
+      <div className="page-body" style={{ padding: 32, maxWidth: 1280, margin: '0 auto' }}>
         {/* Sector filter */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, color: '#8c8c8c', fontWeight: 500 }}>Sector:</span>
@@ -1255,7 +1255,7 @@ const PageHeatmap = () => {
 
   return (
     <>
-      <div style={{
+      <div className="page-header" style={{
         background: '#fff', padding: '16px 32px',
         borderBottom: '1px solid #f0f0f0',
         boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
@@ -1264,7 +1264,7 @@ const PageHeatmap = () => {
         <p style={{ fontSize: 13, color: '#8c8c8c', marginTop: 2 }}>Monthly return % per stock · Green = positive · Red = negative · Intensity = magnitude</p>
       </div>
 
-      <div style={{ padding: 32, maxWidth: '100%', margin: '0 auto', position: 'relative' }}>
+      <div className="page-body" style={{ padding: 32, maxWidth: '100%', margin: '0 auto', position: 'relative' }}>
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
             <div style={{ width: 36, height: 36, border: `3px solid ${BLUE_LIGHT}`, borderTopColor: BLUE, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
@@ -1505,31 +1505,31 @@ const PageCorrelation = () => {
 
   return (
     <>
-      <div style={{ background: '#fff', padding: '16px 32px', borderBottom: '1px solid #f0f0f0', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+      <div className="page-header" style={{ background: '#fff', padding: '16px 32px', borderBottom: '1px solid #f0f0f0', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2a3a' }}>Cross-Correlation Analysis</h1>
         <p style={{ fontSize: 13, color: '#8c8c8c', marginTop: 2 }}>Measures how two stocks move together at different time lags · Lag 0 = same day</p>
       </div>
 
-      <div style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
-        {/* Controls card */}
-        <div style={{
+      <div className="page-body" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
+        {/* Controls card (sticky on mobile) */}
+        <div className="control-bar" style={{
           display: 'flex', alignItems: 'center', gap: 24, marginBottom: 28,
           flexWrap: 'wrap', background: '#fff', borderRadius: 12,
           padding: '18px 24px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
           border: `1.5px solid ${BLUE_LIGHT}`
         }}>
           <StockSelector label="Stock A" value={ticker1} onChange={setTicker1} color={color1} info={info1} />
-          <div style={{ width: 1, height: 32, background: '#e8e8e8' }} />
+          <div className="control-sep" style={{ width: 1, height: 32, background: '#e8e8e8' }} />
           <StockSelector label="Stock B" value={ticker2} onChange={setTicker2} color={color2} info={info2} />
-          <div style={{ width: 1, height: 32, background: '#e8e8e8' }} />
+          <div className="control-sep" style={{ width: 1, height: 32, background: '#e8e8e8' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Period</span>
+            <span className="control-label" style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Period</span>
             <PeriodFilter selected={corrDays} onChange={setCorrDays} />
           </div>
         </div>
 
         {/* Stat cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, marginBottom: 28 }}>
+        <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, marginBottom: 28 }}>
           <StatCard
             label={`Correlation at Lag 0 (${periodLabel})`}
             value={lag0 !== null ? lag0.toFixed(3) : '—'}
@@ -1740,14 +1740,14 @@ const PagePCA = () => {
 
   return (
     <>
-      <div style={{ background: '#fff', padding: '16px 32px', borderBottom: '1px solid #f0f0f0', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+      <div className="page-header" style={{ background: '#fff', padding: '16px 32px', borderBottom: '1px solid #f0f0f0', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e2a3a' }}>Stock Clusters</h1>
         <p style={{ fontSize: 13, color: '#8c8c8c', marginTop: 2 }}>
           PCA · 12-month return profiles{pcaResult ? ` · ${pcaResult.range}` : ''}
         </p>
       </div>
 
-      <div style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
+      <div className="page-body" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
             <div style={{ width: 36, height: 36, border: `3px solid ${BLUE_LIGHT}`, borderTopColor: BLUE, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />

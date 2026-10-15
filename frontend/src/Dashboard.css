@@ -91,16 +91,97 @@
     margin-left: auto;
   }
 
-  /* Main content takes full width */
+  /* Main content takes full width. The page (document) scrolls on mobile:  */
+  /* overflow must stay visible or position: sticky stops working inside.   */
   .main-content {
     flex: 1;
     width: 100%;
-    overflow: auto;
+    min-width: 0;
+    overflow: visible !important;
   }
 
   /* Tighten page padding on mobile */
   .main-content h1 {
     font-size: 18px !important;
+  }
+
+  /* Tighter gutters so charts get the screen width */
+  .page-header {
+    padding: 12px 16px !important;
+  }
+
+  .page-body {
+    padding: 16px !important;
+  }
+
+  /* ── Controls that drive the charts: keep them in view ──── */
+  /* Sticky under the mobile header, so changing the period or  */
+  /* ticker updates the chart without scrolling back up.        */
+  .control-bar {
+    position: sticky;
+    top: 52px;
+    z-index: 150;
+    padding: 10px 12px !important;
+    gap: 8px 12px !important;
+    margin-bottom: 16px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+  }
+
+  .control-sep,
+  .control-label,
+  .control-hint {
+    display: none !important;
+  }
+
+  .period-filter {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+  }
+
+  .period-filter button {
+    flex-shrink: 0;
+  }
+
+  .stock-selector {
+    gap: 6px !important;
+  }
+
+  .stock-selector-btn {
+    min-width: 0 !important;
+    padding: 6px 10px !important;
+  }
+
+  /* Two selectors (Correlation): drop company/sector so both fit on one row */
+  .control-bar:has(.stock-selector ~ .stock-selector) .stock-selector-info {
+    display: none !important;
+  }
+
+  /* Side-by-side cards (Overview tables) stack on phones */
+  .two-col-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* ── Stat cards: 2 per row, no icon ─────────────────────── */
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .stat-card {
+    padding: 12px !important;
+  }
+
+  .stat-icon {
+    display: none !important;
+  }
+
+  .stat-label {
+    font-size: 11px !important;
+  }
+
+  .stat-value {
+    font-size: 16px !important;
   }
 
   /* ── Stock Explorer: x-axis date labels ──────────────────── */
