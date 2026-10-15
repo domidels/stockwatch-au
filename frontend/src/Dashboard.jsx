@@ -533,7 +533,7 @@ const PageOverview = ({ summary }) => {
     </div>
 
     <div className="page-body" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
-      {/* Period filter — above stat cards, same style as Stock Explorer (sticky on mobile) */}
+      {/* Period filter — directly above the chart it drives (sticky on mobile) */}
       <div className="control-bar" style={{
         display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24,
         background: '#fff', borderRadius: 12, padding: '18px 24px',
@@ -546,41 +546,6 @@ const PageOverview = ({ summary }) => {
           {days ? `Last ${PERIODS_EXTENDED.find(p => p.days === days)?.label}` : 'All available data'}
         </span>
       </div>
-
-      {(() => {
-        if (!topPerformers.length || !volatility.length) return null;
-        const best = [...topPerformers].sort((a, b) => b.total_return_pct - a.total_return_pct)[0];
-        const avgReturn = (topPerformers.reduce((s, p) => s + parseFloat(p.total_return_pct), 0) / topPerformers.length).toFixed(1);
-        const pctPositive = Math.round(topPerformers.filter(p => p.total_return_pct >= 0).length / topPerformers.length * 100);
-        const mostStable = [...volatility].sort((a, b) => a.volatility_std - b.volatility_std)[0];
-        const avgPos = avgReturn >= 0;
-        return (
-          <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, marginBottom: 28 }}>
-            <StatCard
-              label="Best Performer"
-              value={`${best.ticker.replace('.AX','')} ${best.total_return_pct > 0 ? '+' : ''}${best.total_return_pct}%`}
-              icon={<IconTrending />} color={BLUE} bg={BLUE_LIGHT}
-            />
-            <StatCard
-              label="Avg Portfolio Return"
-              value={`${avgPos ? '+' : ''}${avgReturn}%`}
-              icon={<IconBarChart />}
-              color={avgPos ? GREEN : RED} bg={avgPos ? GREEN_LIGHT : RED_LIGHT}
-            />
-            <StatCard
-              label="Stocks in Positive"
-              value={`${pctPositive}% (${topPerformers.filter(p => p.total_return_pct >= 0).length}/20)`}
-              icon={<IconActivity />}
-              color={ORANGE} bg={ORANGE_LIGHT}
-            />
-            <StatCard
-              label="Most Stable"
-              value={`${mostStable.ticker.replace('.AX','')} σ ${mostStable.volatility_std}%`}
-              icon={<IconZap />} color={PURPLE} bg={PURPLE_LIGHT}
-            />
-          </div>
-        );
-      })()}
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
@@ -614,12 +579,6 @@ const PageOverview = ({ summary }) => {
                   );
                 })}
               </div>
-              <div style={{ marginBottom: 12, display: 'flex', gap: 20, fontSize: 12, flexWrap: 'wrap' }}>
-                <span style={{ color: '#009E73', fontWeight: 600 }}>↖ Ideal — low risk, positive return</span>
-                <span style={{ color: '#E69F00', fontWeight: 600 }}>↗ Aggressive — high risk, positive return</span>
-                <span style={{ color: '#CC79A7', fontWeight: 600 }}>↙ Trap — low volatility, negative return</span>
-                <span style={{ color: '#cc0000', fontWeight: 600 }}>↘ Avoid — high risk, negative return</span>
-              </div>
               <RiskReturnScatter
                 data={topPerformers.filter(d => {
                   const cat = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(d.ticker));
@@ -633,6 +592,12 @@ const PageOverview = ({ summary }) => {
                 days={days}
                 fixedAvgVol={axisLimits?.fixedAvgVol}
               />
+              <div style={{ marginTop: 12, display: 'flex', gap: 20, fontSize: 12, flexWrap: 'wrap' }}>
+                <span style={{ color: '#009E73', fontWeight: 600 }}>↖ Ideal — low risk, positive return</span>
+                <span style={{ color: '#E69F00', fontWeight: 600 }}>↗ Aggressive — high risk, positive return</span>
+                <span style={{ color: '#CC79A7', fontWeight: 600 }}>↙ Trap — low volatility, negative return</span>
+                <span style={{ color: '#cc0000', fontWeight: 600 }}>↘ Avoid — high risk, negative return</span>
+              </div>
               <p style={{ fontSize: 12, color: '#8c8c8c', lineHeight: 1.7, marginTop: 16, borderTop: '1px solid #f5f5f5', paddingTop: 14 }}>
                 Returns are <strong style={{ color: '#1e2a3a' }}>annualised</strong> (scaled to a 12-month equivalent) so that all periods are directly comparable on the same axis.
                 A stock returning +2% over one month is plotted at +24% annualised — the same as a stock returning +24% over a full year.
@@ -642,6 +607,42 @@ const PageOverview = ({ summary }) => {
               </p>
             </SectionCard>
           </div>
+
+            {/* Stat cards — below the scatter so it stays next to the period selector */}
+            {(() => {
+              if (!topPerformers.length || !volatility.length) return null;
+              const best = [...topPerformers].sort((a, b) => b.total_return_pct - a.total_return_pct)[0];
+              const avgReturn = (topPerformers.reduce((s, p) => s + parseFloat(p.total_return_pct), 0) / topPerformers.length).toFixed(1);
+              const pctPositive = Math.round(topPerformers.filter(p => p.total_return_pct >= 0).length / topPerformers.length * 100);
+              const mostStable = [...volatility].sort((a, b) => a.volatility_std - b.volatility_std)[0];
+              const avgPos = avgReturn >= 0;
+              return (
+                <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, marginBottom: 28 }}>
+                  <StatCard
+                    label="Best Performer"
+                    value={`${best.ticker.replace('.AX','')} ${best.total_return_pct > 0 ? '+' : ''}${best.total_return_pct}%`}
+                    icon={<IconTrending />} color={BLUE} bg={BLUE_LIGHT}
+                  />
+                  <StatCard
+                    label="Avg Portfolio Return"
+                    value={`${avgPos ? '+' : ''}${avgReturn}%`}
+                    icon={<IconBarChart />}
+                    color={avgPos ? GREEN : RED} bg={avgPos ? GREEN_LIGHT : RED_LIGHT}
+                  />
+                  <StatCard
+                    label="Stocks in Positive"
+                    value={`${pctPositive}% (${topPerformers.filter(p => p.total_return_pct >= 0).length}/20)`}
+                    icon={<IconActivity />}
+                    color={ORANGE} bg={ORANGE_LIGHT}
+                  />
+                  <StatCard
+                    label="Most Stable"
+                    value={`${mostStable.ticker.replace('.AX','')} σ ${mostStable.volatility_std}%`}
+                    icon={<IconZap />} color={PURPLE} bg={PURPLE_LIGHT}
+                  />
+                </div>
+              );
+            })()}
 
           <div className="two-col-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 0 }}>
             <SectionCard title="Total Return % — Ranked Best to Worst" icon={<IconBarChart />}
@@ -953,20 +954,6 @@ const PageExplorer = ({ ticker, setTicker }) => {
           </div>
         </div>
 
-        {/* Mini stat cards */}
-        <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginBottom: 28 }}>
-          <StatCard label="Latest Close" value={latest.close ? `$${latest.close.toFixed(2)}` : '—'} icon={<IconDollar />} color={BLUE} bg={BLUE_LIGHT} />
-          <StatCard
-            label={`${periodLabel} Change`}
-            value={priceChange !== null ? `${isPositive ? '+' : ''}${priceChange}%` : '—'}
-            icon={<IconTrending />}
-            color={isPositive ? GREEN : RED}
-            bg={isPositive ? GREEN_LIGHT : RED_LIGHT}
-          />
-          <StatCard label={`${periodLabel} High`} value={maxClose ? `$${maxClose.toFixed(2)}` : '—'} icon={<IconActivity />} color={PURPLE} bg={PURPLE_LIGHT} />
-          <StatCard label={`${periodLabel} Low`} value={minClose ? `$${minClose.toFixed(2)}` : '—'} icon={<IconActivity />} color={ORANGE} bg={ORANGE_LIGHT} />
-        </div>
-
         {/* Line chart */}
         <div style={{ marginBottom: 28 }}>
           <SectionCard title={`Closing Price — ${ticker} (${periodLabel})`} icon={<IconSearch />}
@@ -1005,6 +992,20 @@ const PageExplorer = ({ ticker, setTicker }) => {
               </ResponsiveContainer>
             )}
           </SectionCard>
+        </div>
+
+        {/* Mini stat cards — below the chart so it stays next to the period selector */}
+        <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginBottom: 28 }}>
+          <StatCard label="Latest Close" value={latest.close ? `$${latest.close.toFixed(2)}` : '—'} icon={<IconDollar />} color={BLUE} bg={BLUE_LIGHT} />
+          <StatCard
+            label={`${periodLabel} Change`}
+            value={priceChange !== null ? `${isPositive ? '+' : ''}${priceChange}%` : '—'}
+            icon={<IconTrending />}
+            color={isPositive ? GREEN : RED}
+            bg={isPositive ? GREEN_LIGHT : RED_LIGHT}
+          />
+          <StatCard label={`${periodLabel} High`} value={maxClose ? `$${maxClose.toFixed(2)}` : '—'} icon={<IconActivity />} color={PURPLE} bg={PURPLE_LIGHT} />
+          <StatCard label={`${periodLabel} Low`} value={minClose ? `$${minClose.toFixed(2)}` : '—'} icon={<IconActivity />} color={ORANGE} bg={ORANGE_LIGHT} />
         </div>
 
         {/* Monthly / Weekly return bar chart */}
@@ -1528,24 +1529,6 @@ const PageCorrelation = () => {
           </div>
         </div>
 
-        {/* Stat cards */}
-        <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, marginBottom: 28 }}>
-          <StatCard
-            label={`Correlation at Lag 0 (${periodLabel})`}
-            value={lag0 !== null ? lag0.toFixed(3) : '—'}
-            icon={<IconCorrelation />}
-            color={lag0 !== null ? (Math.abs(lag0) > sigThreshold ? (lag0 > 0 ? GREEN : RED) : ORANGE) : BLUE}
-            bg={lag0 !== null ? (Math.abs(lag0) > sigThreshold ? (lag0 > 0 ? GREEN_LIGHT : RED_LIGHT) : ORANGE_LIGHT) : BLUE_LIGHT}
-          />
-          <StatCard label="Trading Days" value={n > 0 ? n : '—'} icon={<IconActivity />} color={PURPLE} bg={PURPLE_LIGHT} />
-          <StatCard label="Significance Threshold" value={`±${sigThreshold}`} icon={<IconZap />} color={ORANGE} bg={ORANGE_LIGHT} />
-          <StatCard
-            label="Interpretation"
-            value={lag0 !== null ? (Math.abs(lag0) > sigThreshold ? (lag0 > 0.6 ? 'Strong +' : lag0 > 0.3 ? 'Moderate +' : lag0 < -0.3 ? 'Negative' : 'Weak') : 'Not significant') : '—'}
-            icon={<IconTrending />} color={BLUE} bg={BLUE_LIGHT}
-          />
-        </div>
-
         {/* CCF Chart */}
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
@@ -1595,6 +1578,24 @@ const PageCorrelation = () => {
             </ResponsiveContainer>
           </SectionCard>
         ) : null}
+
+        {/* Stat cards — below the chart so it stays next to the period selector */}
+        <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, marginTop: 24, marginBottom: 0 }}>
+          <StatCard
+            label={`Correlation at Lag 0 (${periodLabel})`}
+            value={lag0 !== null ? lag0.toFixed(3) : '—'}
+            icon={<IconCorrelation />}
+            color={lag0 !== null ? (Math.abs(lag0) > sigThreshold ? (lag0 > 0 ? GREEN : RED) : ORANGE) : BLUE}
+            bg={lag0 !== null ? (Math.abs(lag0) > sigThreshold ? (lag0 > 0 ? GREEN_LIGHT : RED_LIGHT) : ORANGE_LIGHT) : BLUE_LIGHT}
+          />
+          <StatCard label="Trading Days" value={n > 0 ? n : '—'} icon={<IconActivity />} color={PURPLE} bg={PURPLE_LIGHT} />
+          <StatCard label="Significance Threshold" value={`±${sigThreshold}`} icon={<IconZap />} color={ORANGE} bg={ORANGE_LIGHT} />
+          <StatCard
+            label="Interpretation"
+            value={lag0 !== null ? (Math.abs(lag0) > sigThreshold ? (lag0 > 0.6 ? 'Strong +' : lag0 > 0.3 ? 'Moderate +' : lag0 < -0.3 ? 'Negative' : 'Weak') : 'Not significant') : '—'}
+            icon={<IconTrending />} color={BLUE} bg={BLUE_LIGHT}
+          />
+        </div>
 
         {/* Monthly correlation chart */}
         {monthlyCorr.length > 1 && (
