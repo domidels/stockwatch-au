@@ -109,6 +109,27 @@ export const fetchMonthlyReturns = async () => {
   }
 };
 
+// Sharpe, beta, rank and sector-relative return per ticker for one period.
+export const fetchExplorerMetrics = async (days = null) => {
+  try {
+    const data = await loadJson('/explorer.json');
+    return data.periods[periodKey(days)] || {};
+  } catch (error) {
+    console.error('Error fetching explorer metrics:', error);
+    throw error;
+  }
+};
+
+// Equal-weight benchmark levels: { dates: [...], series: { <sector>: [...], 'All stocks': [...] } }
+export const fetchBenchmarks = async () => {
+  try {
+    return await loadJson('/indices.json');
+  } catch (error) {
+    console.error('Error fetching benchmarks:', error);
+    throw error;
+  }
+};
+
 export const fetchPCA = async () => {
   try {
     // camelCase keys generated in Python — no key normalisation needed.

@@ -109,6 +109,8 @@ s3://stockwatch-au-data-.../
     heatmap.json
     pca.json
     history/<TICKER>.json         # Full price history, filtered by period in the browser
+    indices.json                  # Equal-weight sector / 20-stock benchmark levels (Explorer comparison)
+    explorer.json                 # Sharpe, beta, rank and sector-relative return per period and ticker
 ```
 
 - **Static API**: after each run the ingestion Lambda regenerates `api/*.json` (`lambda/analytics.py`, shared with the API handler). The dashboard loads these files from CloudFront, so a page load never waits on a Lambda cold start. To rebuild them without fetching new data: `python scripts/build_static_api.py`, or invoke the ingestion Lambda with `{"rebuild_api": true}`.

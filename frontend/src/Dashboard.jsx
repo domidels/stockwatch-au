@@ -12,7 +12,9 @@ import {
   fetchVolatilityAnalysis,
   fetchStockHistory,
   fetchMonthlyReturns,
-  fetchPCA
+  fetchPCA,
+  fetchExplorerMetrics,
+  fetchBenchmarks
 } from './api';
 
 // ── Icons ──────────────────────────────────────────────────
@@ -143,7 +145,7 @@ const PERIOD_LABELS = {
 };
 
 // ── Reusable components ────────────────────────────────────
-const StatCard = ({ label, value, icon, color, bg }) => (
+const StatCard = ({ label, value, icon, color, bg, sub }) => (
   <div className="stat-card" style={{
     background: '#fff', borderRadius: 12, padding: '24px',
     boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
@@ -157,6 +159,7 @@ const StatCard = ({ label, value, icon, color, bg }) => (
     <div>
       <p className="stat-label" style={{ fontSize: 14, color: '#8c8c8c', fontWeight: 500, marginBottom: 4 }}>{label}</p>
       <p className="stat-value" style={{ fontSize: 20, fontWeight: 700, color: '#1e2a3a', lineHeight: 1 }}>{value}</p>
+      {sub && <p className="stat-sub" style={{ fontSize: 12, color: '#8c8c8c', marginTop: 6 }}>{sub}</p>}
     </div>
   </div>
 );
@@ -211,6 +214,24 @@ const CustomTooltip = ({ active, payload, label }) => {
       <p style={{ fontWeight: 600, marginBottom: 4, color: '#1e2a3a' }}>{label}</p>
       {payload.map((p, i) => (
         <p key={i} style={{ color: p.color }}>{p.name}: <strong>{typeof p.value === 'number' ? p.value.toFixed(2) : p.value}</strong></p>
+      ))}
+    </div>
+  );
+};
+
+// Tooltip for % series (benchmark comparison, drawdown)
+const PctTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid #e8e8e8', borderRadius: 8,
+      padding: '10px 14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13
+    }}>
+      <p style={{ fontWeight: 600, marginBottom: 4, color: '#1e2a3a' }}>{label}</p>
+      {payload.filter(p => typeof p.value === 'number').map((p, i) => (
+        <p key={i} style={{ color: p.stroke || p.color }}>
+          {p.name}: <strong>{p.value > 0 ? '+' : ''}{p.value.toFixed(2)}%</strong>
+        </p>
       ))}
     </div>
   );
@@ -825,6 +846,17 @@ const PageExplorer = ({ ticker, setTicker }) => {
   const [explorerDays, setExplorerDays] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [metrics, setMetrics] = useState({});          // { [ticker]: { sharpe, beta, rank, ... } } for the period
+  const [benchmarks, setBenchmarks] = useState(null);  // { dates, series } — equal-weight levels
+  const [compare, setCompare] = useState({ sector: false, market: false });
+
+  useEffect(() => {
+    fetchBenchmarks().then(setBenchmarks).catch(() => setBenchmarks(null));
+  }, []);
+
+  useEffect(() => {
+    fetchExplorerMetrics(explorerDays).then(setMetrics).catch(() => setMetrics({}));
+  }, [explorerDays]);
 
   useEffect(() => {
     const prefetchTicker = async (t) => {
@@ -870,6 +902,68 @@ const PageExplorer = ({ ticker, setTicker }) => {
   const baseOffset = maxClose !== null && maxClose > minClose
     ? (maxClose - baseClose) / (maxClose - minClose)
     : 0;
+
+  const tickerMetrics = metrics[ticker] || null;
+  const sectorName = Object.entries(CATEGORIES).find(([, c]) => c.tickers.includes(ticker))?.[0] ?? null;
+  const sectorColor = sectorName ? CATEGORIES[sectorName].color : '#8c8c8c';
+  const compareMode = compare.sector || compare.market;
+
+  // Benchmarks rebased to the window's first date, so stock, sector and the
+  // 20-stock average all start at 0 % on the same day.
+  const benchmarkIndex = React.useMemo(() => {
+    if (!benchmarks) return null;
+    const pos = new Map();
+    benchmarks.dates.forEach((d, i) => pos.set(d, i));
+    return pos;
+  }, [benchmarks]);
+
+  const benchmarkReturns = React.useMemo(() => {
+    if (!benchmarkIndex || !priceHistory.length) return null;
+    const i0 = benchmarkIndex.get(priceHistory[0].date);
+    if (i0 === undefined) return null;
+    const rebase = (name) => {
+      const levels = benchmarks.series[name];
+      if (!levels) return null;
+      return priceHistory.map(d => {
+        const i = benchmarkIndex.get(d.date);
+        return i === undefined ? null : (levels[i] / levels[i0] - 1) * 100;
+      });
+    };
+    return { sector: sectorName ? rebase(sectorName) : null, market: rebase('All stocks') };
+  }, [benchmarkIndex, benchmarks, priceHistory, sectorName]);
+
+  // Price, % change vs window start, benchmarks and drawdown from running peak — one row per day.
+  const chartData = React.useMemo(() => {
+    let peak = -Infinity;
+    return priceHistory.map((d, i) => {
+      peak = Math.max(peak, d.close);
+      return {
+        date: d.date,
+        close: d.close,
+        stockPct: baseClose ? (d.close / baseClose - 1) * 100 : null,
+        sectorPct: benchmarkReturns?.sector?.[i] ?? null,
+        marketPct: benchmarkReturns?.market?.[i] ?? null,
+        drawdown: (d.close / peak - 1) * 100,
+      };
+    });
+  }, [priceHistory, baseClose, benchmarkReturns]);
+
+  const maxDrawdown = chartData.reduce(
+    (worst, d) => (d.drawdown < worst.value ? { value: d.drawdown, date: d.date } : worst),
+    { value: 0, date: null }
+  );
+  const currentDrawdown = chartData.length ? chartData[chartData.length - 1].drawdown : null;
+  const lastOf = (arr) => (arr && arr.length ? arr[arr.length - 1] : null);
+  const sectorReturn = lastOf(benchmarkReturns?.sector);
+  const vsSector = priceChange !== null && sectorReturn !== null ? parseFloat(priceChange) - sectorReturn : null;
+  // Signed formatting; rounds first so tiny values show "0.0", never "-0.0"
+  const fmtSigned = (v, digits) => {
+    const r = Number(v.toFixed(digits));
+    return `${r > 0 ? '+' : ''}${(r === 0 ? 0 : r).toFixed(digits)}`;
+  };
+  const fmtPct = (v, digits = 1) => `${fmtSigned(v, digits)}%`;
+  const fmtPts = (v) => `${fmtSigned(v, 1)} pts`;
+  const ordinal = (n) => `${n}${['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) || n % 10 > 3 ? 0 : n % 10]}`;
 
   const tickFormatter = (dateStr) => {
     if (!dateStr) return '';
@@ -968,9 +1062,35 @@ const PageExplorer = ({ ticker, setTicker }) => {
 
         {/* Line chart */}
         <div style={{ marginBottom: 28 }}>
-          <SectionCard title={`Closing Price — ${ticker} (${periodLabel})`} icon={<IconSearch />}
-            hint={"Daily closing price over the selected period.\nDashed line = first close of the period: green above it, red below.\nHover the chart for the exact price on any date.\n% change in the stat cards = (last − first close) / first close × 100.\nGaps may appear on non-trading days (weekends, public holidays)."}
+          <SectionCard
+            title={compareMode ? `Performance vs Benchmarks — ${ticker} (${periodLabel})` : `Closing Price — ${ticker} (${periodLabel})`}
+            icon={<IconSearch />}
+            hint={"Daily closing price over the selected period.\nDashed line = first close of the period: green above it, red below.\nCompare: switches to % change since the first day, against the equal-weight average of the stock's sector and of all 20 stocks.\nDrawdown (bottom) = % below the highest close reached so far in the period.\nHover the chart for the exact values on any date."}
           >
+            {/* Benchmark toggles — right above the chart they change */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, color: '#8c8c8c', fontWeight: 500 }}>Compare:</span>
+              {[
+                { key: 'sector', label: sectorName ? `${sectorName} avg` : 'Sector avg', color: sectorColor, disabled: !sectorName },
+                { key: 'market', label: 'All 20 stocks avg', color: '#595959', disabled: false },
+              ].map(({ key, label, color, disabled }) => {
+                const active = compare[key];
+                return (
+                  <button key={key} disabled={disabled || !benchmarks}
+                    onClick={() => setCompare(c => ({ ...c, [key]: !c[key] }))}
+                    style={{
+                      padding: '5px 14px', borderRadius: 20, border: '1px solid',
+                      borderColor: active ? color : '#d9d9d9',
+                      background: active ? color : '#fff',
+                      color: active ? '#fff' : '#595959',
+                      fontWeight: active ? 600 : 400, fontSize: 12, cursor: 'pointer',
+                      fontFamily: 'inherit', transition: 'all 0.15s',
+                      opacity: disabled || !benchmarks ? 0.5 : 1,
+                    }}>{active ? '✓ ' : '+ '}{label}</button>
+                );
+              })}
+            </div>
+
             {loading ? (
               <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 36, height: 36, border: `3px solid ${BLUE_LIGHT}`, borderTopColor: BLUE, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
@@ -978,67 +1098,160 @@ const PageExplorer = ({ ticker, setTicker }) => {
             ) : error ? (
               <p style={{ color: RED, textAlign: 'center', padding: 40 }}>{error}</p>
             ) : (
-              <ResponsiveContainer width="100%" height={340}>
-                <AreaChart data={priceHistory}>
-                  <defs>
-                    <linearGradient id="explorerStroke" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset={baseOffset} stopColor={PRICE_UP} />
-                      <stop offset={baseOffset} stopColor={PRICE_DOWN} />
-                    </linearGradient>
-                    <linearGradient id="explorerFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset={0} stopColor={PRICE_UP} stopOpacity={0.22} />
-                      <stop offset={baseOffset} stopColor={PRICE_UP} stopOpacity={0.02} />
-                      <stop offset={baseOffset} stopColor={PRICE_DOWN} stopOpacity={0.02} />
-                      <stop offset={1} stopColor={PRICE_DOWN} stopOpacity={0.22} />
-                    </linearGradient>
-                  </defs>
+              <>
+              {compareMode ? (
+                <ResponsiveContainer width="100%" height={340}>
+                  <LineChart data={chartData} syncId="explorer">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" vertical={false} />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 11, fill: '#8c8c8c' }}
+                      axisLine={false} tickLine={false}
+                      tickFormatter={tickFormatter}
+                      interval="preserveStartEnd" minTickGap={28}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: '#8c8c8c' }}
+                      axisLine={false} tickLine={false}
+                      tickFormatter={v => `${v > 0 ? '+' : ''}${Math.round(v)}%`}
+                      domain={['auto', 'auto']}
+                    />
+                    <Tooltip content={<PctTooltip />} />
+                    <ReferenceLine y={0} stroke="#b0b0b0" strokeWidth={1} strokeDasharray="3 3" />
+                    <Line type="monotone" dataKey="stockPct" name={ticker.replace('.AX', '')}
+                      stroke="#1e2a3a" strokeWidth={2} dot={false} isAnimationActive={false} />
+                    {compare.sector && (
+                      <Line type="monotone" dataKey="sectorPct" name={`${sectorName} avg`}
+                        stroke={sectorColor} strokeWidth={1.75} strokeDasharray="5 3" dot={false}
+                        connectNulls isAnimationActive={false} />
+                    )}
+                    {compare.market && (
+                      <Line type="monotone" dataKey="marketPct" name="All 20 avg"
+                        stroke="#595959" strokeWidth={1.75} strokeDasharray="2 3" dot={false}
+                        connectNulls isAnimationActive={false} />
+                    )}
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <ResponsiveContainer width="100%" height={340}>
+                  <AreaChart data={chartData} syncId="explorer">
+                    <defs>
+                      <linearGradient id="explorerStroke" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset={baseOffset} stopColor={PRICE_UP} />
+                        <stop offset={baseOffset} stopColor={PRICE_DOWN} />
+                      </linearGradient>
+                      <linearGradient id="explorerFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset={0} stopColor={PRICE_UP} stopOpacity={0.22} />
+                        <stop offset={baseOffset} stopColor={PRICE_UP} stopOpacity={0.02} />
+                        <stop offset={baseOffset} stopColor={PRICE_DOWN} stopOpacity={0.02} />
+                        <stop offset={1} stopColor={PRICE_DOWN} stopOpacity={0.22} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" vertical={false} />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 11, fill: '#8c8c8c' }}
+                      axisLine={false} tickLine={false}
+                      tickFormatter={tickFormatter}
+                      interval="preserveStartEnd" minTickGap={28}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: '#8c8c8c' }}
+                      axisLine={false} tickLine={false}
+                      tickFormatter={v => `$${v}`}
+                      domain={['auto', 'auto']}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    {baseClose !== null && (
+                      <ReferenceLine y={baseClose} stroke="#b0b0b0" strokeWidth={1} strokeDasharray="3 3" />
+                    )}
+                    <Area
+                      type="monotone" dataKey="close" name="Close"
+                      baseValue={baseClose ?? 'dataMin'}
+                      stroke="url(#explorerStroke)" strokeWidth={1.75}
+                      fill="url(#explorerFill)" fillOpacity={1}
+                      dot={false} isAnimationActive={false}
+                      activeDot={({ cx, cy, payload }) => (
+                        <circle cx={cx} cy={cy} r={5} stroke="#fff" strokeWidth={2}
+                          fill={payload.close >= baseClose ? PRICE_UP : PRICE_DOWN} />
+                      )}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+
+              {/* Drawdown — how far below its running peak the stock sits */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, margin: '18px 0 4px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#1e2a3a' }}>Drawdown from peak</span>
+                {maxDrawdown.date && (
+                  <span style={{ fontSize: 12, color: '#8c8c8c' }}>
+                    Max <strong style={{ color: PRICE_DOWN }}>{fmtPct(maxDrawdown.value)}</strong> on {maxDrawdown.date}
+                  </span>
+                )}
+              </div>
+              <ResponsiveContainer width="100%" height={130}>
+                <AreaChart data={chartData} syncId="explorer" margin={{ top: 4, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 11, fill: '#8c8c8c' }}
-                    axisLine={false} tickLine={false}
-                    tickFormatter={tickFormatter}
-                    interval={Math.floor(priceHistory.length / 8) || 1}
-                  />
+                  <XAxis dataKey="date" hide />
                   <YAxis
                     tick={{ fontSize: 11, fill: '#8c8c8c' }}
                     axisLine={false} tickLine={false}
-                    tickFormatter={v => `$${v}`}
-                    domain={['auto', 'auto']}
+                    tickFormatter={v => `${Math.round(v)}%`}
+                    domain={['dataMin', 0]}
                   />
-                  <Tooltip content={<CustomTooltip />} />
-                  {baseClose !== null && (
-                    <ReferenceLine y={baseClose} stroke="#b0b0b0" strokeWidth={1} strokeDasharray="3 3" />
-                  )}
-                  <Area
-                    type="monotone" dataKey="close" name="Close"
-                    baseValue={baseClose ?? 'dataMin'}
-                    stroke="url(#explorerStroke)" strokeWidth={1.75}
-                    fill="url(#explorerFill)" fillOpacity={1}
-                    dot={false} isAnimationActive={false}
-                    activeDot={({ cx, cy, payload }) => (
-                      <circle cx={cx} cy={cy} r={5} stroke="#fff" strokeWidth={2}
-                        fill={payload.close >= baseClose ? PRICE_UP : PRICE_DOWN} />
-                    )}
-                  />
+                  <Tooltip content={<PctTooltip />} />
+                  <Area type="monotone" dataKey="drawdown" name="Drawdown" baseValue={0}
+                    stroke={PRICE_DOWN} strokeWidth={1.25} fill={PRICE_DOWN} fillOpacity={0.12}
+                    dot={false} isAnimationActive={false} />
                 </AreaChart>
               </ResponsiveContainer>
+              </>
             )}
           </SectionCard>
         </div>
 
         {/* Mini stat cards — below the chart so it stays next to the period selector */}
-        <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginBottom: 28 }}>
-          <StatCard label="Latest Close" value={latest.close ? `$${latest.close.toFixed(2)}` : '—'} icon={<IconDollar />} color={BLUE} bg={BLUE_LIGHT} />
+        <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 20, marginBottom: 28 }}>
+          <StatCard
+            label="Latest Close"
+            value={latest.close ? `$${latest.close.toFixed(2)}` : '—'}
+            sub={maxClose ? `Range $${minClose.toFixed(2)} – $${maxClose.toFixed(2)}` : null}
+            icon={<IconDollar />} color={BLUE} bg={BLUE_LIGHT}
+          />
           <StatCard
             label={`${periodLabel} Change`}
             value={priceChange !== null ? `${isPositive ? '+' : ''}${priceChange}%` : '—'}
+            sub={vsSector !== null ? `${fmtPts(vsSector)} vs ${sectorName} avg` : null}
             icon={<IconTrending />}
             color={isPositive ? GREEN : RED}
             bg={isPositive ? GREEN_LIGHT : RED_LIGHT}
           />
-          <StatCard label={`${periodLabel} High`} value={maxClose ? `$${maxClose.toFixed(2)}` : '—'} icon={<IconActivity />} color={PURPLE} bg={PURPLE_LIGHT} />
-          <StatCard label={`${periodLabel} Low`} value={minClose ? `$${minClose.toFixed(2)}` : '—'} icon={<IconActivity />} color={ORANGE} bg={ORANGE_LIGHT} />
+          <StatCard
+            label={`Rank (${periodLabel} return)`}
+            value={tickerMetrics?.rank ? `${tickerMetrics.rank} / ${tickerMetrics.rank_of}` : '—'}
+            sub={tickerMetrics?.sector_rank ? `${ordinal(tickerMetrics.sector_rank)} of ${tickerMetrics.sector_size} in ${sectorName}` : null}
+            icon={<IconBarChart />} color={BLUE} bg={BLUE_LIGHT}
+          />
+          <StatCard
+            label="Sharpe Ratio"
+            value={tickerMetrics?.sharpe != null ? tickerMetrics.sharpe.toFixed(2) : '—'}
+            sub="Annualised · risk-free 4%"
+            icon={<IconZap />}
+            color={tickerMetrics?.sharpe >= 0 ? GREEN : RED}
+            bg={tickerMetrics?.sharpe >= 0 ? GREEN_LIGHT : RED_LIGHT}
+          />
+          <StatCard
+            label="Max Drawdown"
+            value={maxDrawdown.date ? fmtPct(maxDrawdown.value) : '—'}
+            sub={currentDrawdown !== null ? `Now ${currentDrawdown > -0.05 ? 'at its peak' : `${fmtPct(currentDrawdown)} from peak`}` : null}
+            icon={<IconActivity />} color={RED} bg={RED_LIGHT}
+          />
+          <StatCard
+            label="Beta"
+            value={tickerMetrics?.beta != null ? tickerMetrics.beta.toFixed(2) : '—'}
+            sub="Sensitivity to the all 20 avg"
+            icon={<IconActivity />} color={PURPLE} bg={PURPLE_LIGHT}
+          />
         </div>
 
         {/* Monthly / Weekly return bar chart */}

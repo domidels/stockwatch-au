@@ -15,6 +15,19 @@ from sklearn.decomposition import PCA
 # Periods offered by the dashboard (None = all available data)
 OVERVIEW_PERIODS = [30, 90, 180, 365, 730, None]
 
+# Keep in sync with CATEGORIES in frontend/src/Dashboard.jsx
+SECTORS = {
+    'Banking': ['CBA.AX', 'WBC.AX', 'NAB.AX', 'ANZ.AX', 'MQG.AX'],
+    'Mining & Energy': ['BHP.AX', 'RIO.AX', 'FMG.AX', 'STO.AX'],
+    'Healthcare': ['CSL.AX', 'COH.AX', 'SHL.AX'],
+    'Retail': ['WES.AX', 'COL.AX', 'WOW.AX'],
+    'Technology': ['XRO.AX', 'ALL.AX', 'TLS.AX'],
+    'Real Estate': ['REA.AX', 'GMG.AX'],
+}
+MARKET = 'All stocks'          # equal-weight average of the whole universe
+RISK_FREE_RATE = 0.04          # AU 10Y bond, same as the Overview risk/return chart
+TRADING_DAYS = 252
+
 
 def apply_days_filter(df: pd.DataFrame, days: int) -> pd.DataFrame:
     if not days:
@@ -196,6 +209,76 @@ def get_market_summary(df: pd.DataFrame) -> dict:
     }
 
 
+def _sector_of(ticker: str) -> str | None:
+    return next((name for name, tickers in SECTORS.items() if ticker in tickers), None)
+
+
+def _daily_returns(df: pd.DataFrame) -> pd.DataFrame:
+    """Date x ticker matrix of daily close-to-close returns (NaN before a ticker's first close)."""
+    closes = df.pivot_table(index='date', columns='ticker', values='close').sort_index()
+    return closes.pct_change(fill_method=None)
+
+
+def get_benchmark_indices(df: pd.DataFrame) -> dict:
+    """
+    Equal-weight benchmark levels per sector and for the whole universe.
+    Each day's return is the average daily return of the members trading that day;
+    levels start at 1.0 and the frontend rebases them to the selected window.
+    """
+    returns = _daily_returns(df)
+    groups = {**SECTORS, MARKET: list(returns.columns)}
+
+    series = {}
+    for name, tickers in groups.items():
+        members = [t for t in tickers if t in returns.columns]
+        level = (1 + returns[members].mean(axis=1, skipna=True).fillna(0)).cumprod()
+        series[name] = [round(float(v), 6) for v in level]
+
+    return {'type': 'indices', 'dates': list(returns.index), 'series': series}
+
+
+def get_explorer_metrics(df: pd.DataFrame, days: int = None) -> dict:
+    """
+    Risk / relative-performance metrics per ticker over one period:
+    Sharpe ratio, beta vs the equal-weight universe, rank on total return
+    (overall and within sector), and the sector / universe return over the same dates.
+    """
+    returns = _daily_returns(apply_days_filter(df, days))
+    market = returns.mean(axis=1, skipna=True)
+    rf_daily = RISK_FREE_RATE / TRADING_DAYS
+
+    metrics = {}
+    for ticker in returns.columns:
+        r = returns[ticker].dropna()
+        if len(r) < 20:
+            continue
+        m = market.loc[r.index]
+        sector = _sector_of(ticker)
+        sector_members = [t for t in SECTORS.get(sector, []) if t in returns.columns]
+        sector_r = returns.loc[r.index, sector_members].mean(axis=1, skipna=True)
+        std = float(r.std())
+        metrics[ticker] = {
+            'sector': sector,
+            'total_return_pct': round(float((1 + r).prod() - 1) * 100, 2),
+            'sector_return_pct': round(float((1 + sector_r).prod() - 1) * 100, 2),
+            'market_return_pct': round(float((1 + m).prod() - 1) * 100, 2),
+            'sharpe': round((float(r.mean()) - rf_daily) / std * TRADING_DAYS ** 0.5, 2) if std else None,
+            'beta': round(float(r.cov(m) / m.var()), 2) if m.var() else None,
+        }
+
+    ranked = sorted(metrics, key=lambda t: metrics[t]['total_return_pct'], reverse=True)
+    for i, ticker in enumerate(ranked):
+        metrics[ticker]['rank'] = i + 1
+        metrics[ticker]['rank_of'] = len(ranked)
+    for sector in SECTORS:
+        peers = [t for t in ranked if metrics[t]['sector'] == sector]
+        for i, ticker in enumerate(peers):
+            metrics[ticker]['sector_rank'] = i + 1
+            metrics[ticker]['sector_size'] = len(peers)
+
+    return metrics
+
+
 def build_static_payloads(df: pd.DataFrame) -> dict:
     """
     Pre-compute every payload the dashboard needs, keyed by relative S3 path.
@@ -206,6 +289,8 @@ def build_static_payloads(df: pd.DataFrame) -> dict:
     - heatmap.json          monthly returns
     - pca.json              PCA analysis
     - history/<TICKER>.json full price history (the frontend filters by period)
+    - indices.json          equal-weight sector / universe benchmark levels (Explorer comparison)
+    - explorer.json         Sharpe, beta, rank and sector-relative return per period and ticker
     """
     df = df.copy()
     df['date'] = df['date'].astype(str)
@@ -228,6 +313,15 @@ def build_static_payloads(df: pd.DataFrame) -> dict:
         },
         'heatmap.json': monthly,
         'pca.json': get_pca_analysis(df, monthly['data']),
+        'indices.json': get_benchmark_indices(df),
+        'explorer.json': {
+            'type': 'explorer',
+            'risk_free_rate': RISK_FREE_RATE,
+            'periods': {
+                str(days) if days else 'all': get_explorer_metrics(df, days)
+                for days in OVERVIEW_PERIODS
+            },
+        },
     }
 
     for ticker in sorted(df['ticker'].unique()):
